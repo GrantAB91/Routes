@@ -2,6 +2,13 @@ import type { Metadata } from 'next';
 
 import './globals.css';
 
+// Rendering is dynamic so the per-request CSP nonce from src/middleware.ts can
+// be stamped onto Next's script tags. A statically prerendered page has its HTML
+// baked at build time and cannot carry a nonce, which leaves 'strict-dynamic'
+// refusing every chunk and the page inert. Contour is an interactive planner, so
+// static prerendering buys little here and a working CSP is worth more.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Contour — cycling route planning',
   description:

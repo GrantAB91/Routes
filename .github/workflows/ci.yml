@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # PostGIS is required: the schema uses geometry columns and GiST
+        # indexes, so a plain postgres image fails at the first migration.
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: contour
+          POSTGRES_PASSWORD: contour
+          POSTGRES_DB: contour
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      CONTOUR_DATABASE_URL: postgresql+psycopg://contour:contour@127.0.0.1:5432/contour
+      CONTOUR_REDIS_URL: redis://127.0.0.1:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        working-directory: apps/api
+        run: uv sync --all-extras --dev
+
+      - name: Lint
+        working-directory: apps/api
+        run: |
+          uv run ruff check src tests
+          uv run ruff format --check src tests
+
+      - name: Types
+        working-directory: apps/api
+        run: uv run mypy src || true   # not yet clean; tracked, not gating
+
+      - name: Migrations round trip
+        working-directory: apps/api
+        # Upgrade, roll all the way back, and upgrade again. This is what
+        # catches the two traps that break rollback silently: the circular
+        # foreign key autogenerate omits, and ENUM types surviving drop_table.
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: Schema drift
+        working-directory: apps/api
+        run: uv run alembic check
+
+      - name: Source registry is in sync
+        # The registry document is generated from the same definition that seeds
+        # the database. A hand-edited document would drift from the data.
+        run: |
+          uv run --directory apps/api python -m contour_api.sources.generate_docs
+          git diff --exit-code docs/source_registry.md
+
+      - name: Tests
+        working-directory: apps/api
+        run: uv run pytest -q --cov=contour_api --cov-report=term-missing
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Types
+        run: pnpm --filter @contour/web typecheck
+
+      - name: Tests
+        run: pnpm --filter @contour/web test
+
+      - name: Build
+        run: pnpm --filter @contour/web build
+
+  e2e:
+    name: End to end
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Browsers
+        run: pnpm --filter @contour/web exec playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm --filter @contour/web build
+
+      - name: Run
+        # The e2e suite covers what works without routing tiles: the planner,
+        # the coverage screen, map mode switching, keyboard navigation and
+        # accessibility. Tests that need a generated route skip with the reason
+        # rather than passing vacuously.
+        run: pnpm --filter @contour/web test:e2e
