@@ -1,0 +1,166 @@
+/* Contour base styles.
+   Colour is never the only signal (§10.7) and contrast targets WCAG 2.2 AA
+   (§16.9), so text sits at 4.5:1 or better against its background and every
+   interactive element keeps a visible focus ring. */
+
+:root {
+  --ink: #14181c;
+  --ink-muted: #4a5158;
+  --surface: #ffffff;
+  --surface-sunken: #eef1f4;
+  --line: #c7ccd1;
+  --accent: #1a5f8b;
+  --warning: #8a4b12;
+  --danger: #8f1d25;
+  --focus: #0b63c5;
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  background: var(--surface);
+  font: 16px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* §16.10: focus must be visible, and never removed. */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--surface);
+  padding: 0.75rem 1rem;
+  z-index: 100;
+}
+.skip-link:focus { left: 0; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.app-header__brand { font-weight: 700; text-decoration: none; color: var(--ink); }
+.app-header nav { display: flex; gap: 1rem; }
+
+main { padding: 1rem; }
+
+/* Planner layout: compact panel, large map (§16.1). On narrow screens the map
+   is full width and the panel becomes a sheet below it (§16.2). */
+.planner {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .planner { grid-template-columns: 1fr; }
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background: var(--surface);
+}
+
+.map-shell {
+  position: relative;
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.map-notice {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: #fdf6e3;
+  border-bottom: 1px solid var(--line);
+  color: var(--warning);
+}
+
+/* Touch targets stay at least 44px (§16.2.3). */
+button, .mode-switch button {
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+button[aria-pressed='true'], button[aria-current='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.mode-switch { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--line); }
+caption { text-align: left; padding-bottom: 0.5rem; color: var(--ink-muted); }
+
+.elevation-profile__chart {
+  width: 100%;
+  height: auto;
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+.elevation-profile__summary { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.elevation-profile__summary dt { font-size: 0.82rem; color: var(--ink-muted); }
+.elevation-profile__summary dd { margin: 0; font-weight: 600; }
+.elevation-profile__warning { color: var(--warning); }
+
+.topology__layout { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }
+@media (max-width: 860px) { .topology__layout { grid-template-columns: 1fr; } }
+.topology__list { list-style: none; margin: 0; padding: 0; }
+.topology__node {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 0.4rem;
+}
+.topology__kind { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.topology__warning { color: var(--warning); }
+
+.route-summary__verdict { font-weight: 600; padding: 0.6rem 0.8rem; border-radius: var(--radius); }
+.route-summary__verdict[data-verdict='fully_satisfied'] { background: #e8f5ec; }
+.route-summary__verdict[data-verdict='satisfied_with_unknown_data'] { background: #eef3f8; }
+.route-summary__verdict[data-verdict='partially_satisfied'] { background: #fdf6e3; }
+.route-summary__verdict[data-verdict='not_feasible'] { background: #fbeceb; }
+.route-summary__disclaimer { color: var(--ink-muted); font-size: 0.9rem; }
+
+.gap-list li { margin-bottom: 0.5rem; }
+
+/* §16.10: honour reduced-motion for the flyover and any transition. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
