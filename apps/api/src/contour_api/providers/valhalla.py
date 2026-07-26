@@ -35,7 +35,7 @@ from .routing import (
     ExclusionSet,
     HealthReport,
     LatLon,
-    NoRouteFound,
+    NoRouteFoundError,
     ProviderHealth,
     RouteCandidate,
     RouteLegShape,
@@ -123,9 +123,8 @@ class ValhallaProvider:
             status=ProviderHealth.HEALTHY,
             detail="Valhalla responded to /status",
             version=payload.get("version"),
-            dataset_version=payload.get("tileset_last_modified") and str(
-                payload["tileset_last_modified"]
-            ),
+            dataset_version=payload.get("tileset_last_modified")
+            and str(payload["tileset_last_modified"]),
         )
 
     # -- costing ------------------------------------------------------------
@@ -165,7 +164,8 @@ class ValhallaProvider:
             options["use_hills"] = _DEFAULT_USE_HILLS
 
         options["use_ferry"] = (
-            _clamp(preferences.use_ferry) if preferences.use_ferry is not None
+            _clamp(preferences.use_ferry)
+            if preferences.use_ferry is not None
             else _DEFAULT_USE_FERRY
         )
         if preferences.use_living_streets is not None:
@@ -288,10 +288,7 @@ class ValhallaProvider:
 
         if with_range:
             pairs = data.get("range_height") or []
-            return [
-                (float(item[0]), None if item[1] is None else float(item[1]))
-                for item in pairs
-            ]
+            return [(float(item[0]), None if item[1] is None else float(item[1])) for item in pairs]
         heights = data.get("height") or []
         return [(0.0, None if h is None else float(h)) for h in heights]
 
@@ -333,11 +330,9 @@ class ValhallaProvider:
 
         # 442 is Valhalla's "no path could be found for input" family.
         if code in {442, 443} or "no path" in message.lower():
-            return NoRouteFound(f"Valhalla could not connect the locations: {message}")
+            return NoRouteFoundError(f"Valhalla could not connect the locations: {message}")
         if response.status_code >= 500:
-            return RoutingError(
-                "provider_error", f"Valhalla failed: {message}", retryable=True
-            )
+            return RoutingError("provider_error", f"Valhalla failed: {message}", retryable=True)
         return RoutingError("invalid_routing_request", f"Valhalla rejected the request: {message}")
 
     # -- parsing ------------------------------------------------------------

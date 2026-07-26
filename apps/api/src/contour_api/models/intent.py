@@ -76,9 +76,7 @@ class RouteIntent(Base, UUIDPrimaryKey, Timestamped):
     direction: Mapped[str | None] = mapped_column(String(20))
 
     # 5-6. Bicycle and surface
-    bicycle_type: Mapped[BicycleType | None] = mapped_column(
-        Enum(BicycleType, name="bicycle_type")
-    )
+    bicycle_type: Mapped[BicycleType | None] = mapped_column(Enum(BicycleType, name="bicycle_type"))
     surface_requirements: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     # 7-13. Distance, time and gradient limits

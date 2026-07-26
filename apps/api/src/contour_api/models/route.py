@@ -91,9 +91,7 @@ class Route(Base, UUIDPrimaryKey, Timestamped):
         ForeignKey("route_version.id", ondelete="SET NULL", use_alter=True),
     )
 
-    country_codes: Mapped[list[str]] = mapped_column(
-        ARRAY(String(2)), nullable=False, default=list
-    )
+    country_codes: Mapped[list[str]] = mapped_column(ARRAY(String(2)), nullable=False, default=list)
     region_names: Mapped[list[str]] = mapped_column(
         ARRAY(String(120)), nullable=False, default=list
     )
@@ -104,9 +102,7 @@ class Route(Base, UUIDPrimaryKey, Timestamped):
     # Set when any contributing source forbids redistribution. Publish and
     # export consult this before acting and explain the exact restriction
     # rather than silently dropping the affected sections (§14.5, §20.9).
-    redistribution_blocked: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    redistribution_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     redistribution_block_reason: Mapped[str | None] = mapped_column(Text)
 
     versions: Mapped[list[RouteVersion]] = relationship(
@@ -190,9 +186,7 @@ class RouteVersion(Base, UUIDPrimaryKey, Timestamped):
     ferry_distance_m: Mapped[float | None] = mapped_column(Float)
     ferry_crossing_count: Mapped[int | None] = mapped_column(Integer)
 
-    bicycle_type: Mapped[BicycleType | None] = mapped_column(
-        Enum(BicycleType, name="bicycle_type")
-    )
+    bicycle_type: Mapped[BicycleType | None] = mapped_column(Enum(BicycleType, name="bicycle_type"))
     # Engine and data provenance for this exact geometry, so a result stays
     # explainable after the engine or its tiles are upgraded.
     routing_provider: Mapped[str | None] = mapped_column(String(60))
@@ -201,9 +195,7 @@ class RouteVersion(Base, UUIDPrimaryKey, Timestamped):
     elevation_provider: Mapped[str | None] = mapped_column(String(60))
     elevation_dataset_id: Mapped[str | None] = mapped_column(String(200))
 
-    route: Mapped[Route] = relationship(
-        back_populates="versions", foreign_keys=[route_id]
-    )
+    route: Mapped[Route] = relationship(back_populates="versions", foreign_keys=[route_id])
     segments: Mapped[list[RouteSegment]] = relationship(
         back_populates="route_version", cascade="all, delete-orphan"
     )
@@ -290,9 +282,7 @@ class RouteSegment(Base, UUIDPrimaryKey):
         PGUUID(as_uuid=True), ForeignKey("route_version.id", ondelete="CASCADE"), nullable=False
     )
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
-    geom = mapped_column(
-        Geometry("LINESTRING", srid=4326, spatial_index=True), nullable=False
-    )
+    geom = mapped_column(Geometry("LINESTRING", srid=4326, spatial_index=True), nullable=False)
 
     start_distance_m: Mapped[float] = mapped_column(Float, nullable=False)
     distance_m: Mapped[float] = mapped_column(Float, nullable=False)
@@ -521,9 +511,7 @@ class AvoidArea(Base, UUIDPrimaryKey, Timestamped):
         PGUUID(as_uuid=True), ForeignKey("route.id", ondelete="CASCADE")
     )
     name: Mapped[str | None] = mapped_column(String(255))
-    geom = mapped_column(
-        Geometry("POLYGON", srid=4326, spatial_index=True), nullable=False
-    )
+    geom = mapped_column(Geometry("POLYGON", srid=4326, spatial_index=True), nullable=False)
     # A hard avoid is a constraint; a soft one is a preference with a penalty.
     # Keeping them distinct is what lets the feasibility verdict distinguish
     # "impossible" from "expensive" (§7.3).

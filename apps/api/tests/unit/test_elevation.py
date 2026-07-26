@@ -42,8 +42,7 @@ def ramp(
 
 def flat(count: int, interval_m: float = 30.0, elevation_m: float = 100.0):
     return [
-        ElevationPoint(distance_m=i * interval_m, elevation_m=elevation_m)
-        for i in range(count)
+        ElevationPoint(distance_m=i * interval_m, elevation_m=elevation_m) for i in range(count)
     ]
 
 
@@ -166,9 +165,11 @@ class TestCoverageGaps:
         assert profile.coverage_ratio == 0.0
 
     def test_coverage_ratio_reflects_measured_distance(self) -> None:
-        points = flat(5) + [ElevationPoint(distance_m=150.0, elevation_m=None)] + [
-            ElevationPoint(distance_m=i * 30.0, elevation_m=100.0) for i in range(6, 11)
-        ]
+        points = (
+            flat(5)
+            + [ElevationPoint(distance_m=150.0, elevation_m=None)]
+            + [ElevationPoint(distance_m=i * 30.0, elevation_m=100.0) for i in range(6, 11)]
+        )
 
         profile = analyse(points)
 
@@ -245,10 +246,7 @@ class TestGradient:
                 ElevationPoint(distance_m=600.0 + i * 30.0, elevation_m=100.0 + i * 6.0)
                 for i in range(1, 6)
             ]
-            + [
-                ElevationPoint(distance_m=750.0 + i * 30.0, elevation_m=130.0)
-                for i in range(1, 25)
-            ]
+            + [ElevationPoint(distance_m=750.0 + i * 30.0, elevation_m=130.0) for i in range(1, 25)]
         )
 
         profile = analyse(points, AnalysisParameters(source_resolution_m=30.0))
@@ -345,9 +343,7 @@ class TestRelief:
 
     def test_rolling_terrain_accumulates_both(self) -> None:
         points = [
-            ElevationPoint(
-                distance_m=i * 30.0, elevation_m=100.0 + 40.0 * math.sin(i / 8.0)
-            )
+            ElevationPoint(distance_m=i * 30.0, elevation_m=100.0 + 40.0 * math.sin(i / 8.0))
             for i in range(200)
         ]
 
@@ -382,8 +378,7 @@ elevation_point = st.builds(
 @given(st.lists(elevation_point, min_size=2, max_size=120))
 def test_relief_is_never_negative(points: list[ElevationPoint]) -> None:
     ordered = [
-        ElevationPoint(distance_m=i * 30.0, elevation_m=p.elevation_m)
-        for i, p in enumerate(points)
+        ElevationPoint(distance_m=i * 30.0, elevation_m=p.elevation_m) for i, p in enumerate(points)
     ]
 
     ascent, descent = accumulate_relief(ElevationSpan(points=tuple(ordered)), 3.0)
@@ -401,8 +396,7 @@ def test_relief_difference_matches_net_change(points: list[ElevationPoint]) -> N
     the hysteresis logic, which no example-based test reliably finds.
     """
     ordered = [
-        ElevationPoint(distance_m=i * 30.0, elevation_m=p.elevation_m)
-        for i, p in enumerate(points)
+        ElevationPoint(distance_m=i * 30.0, elevation_m=p.elevation_m) for i, p in enumerate(points)
     ]
     span = ElevationSpan(points=tuple(ordered))
 

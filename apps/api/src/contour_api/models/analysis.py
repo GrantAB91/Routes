@@ -111,9 +111,7 @@ class Climb(Base, UUIDPrimaryKey, Timestamped):
     average_grade_percent: Mapped[float] = mapped_column(Float, nullable=False)
     max_grade_percent: Mapped[float | None] = mapped_column(Float)
     # Keyed by window in metres, e.g. {"25": 14.2, "100": 11.8, "500": 8.1}.
-    max_sustained_grade_percent: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    max_sustained_grade_percent: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     # Distance in metres per gradient bucket, e.g. {"0-3": 400, "3-6": 1200}.
     gradient_distribution_m: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 

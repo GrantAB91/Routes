@@ -330,9 +330,7 @@ def smooth_span(span: ElevationSpan, window_m: float) -> ElevationSpan:
     return ElevationSpan(points=tuple(smoothed))
 
 
-def accumulate_relief(
-    span: ElevationSpan, min_gain_threshold_m: float
-) -> tuple[float, float]:
+def accumulate_relief(span: ElevationSpan, min_gain_threshold_m: float) -> tuple[float, float]:
     """Cumulative ascent and descent over one span, in metres.
 
     Uses hysteresis rather than summing every positive difference. A run of
@@ -517,9 +515,7 @@ def analyse(
         filtered_spans.append(cleaned)
         filtered_sample_count += replaced
 
-    smoothed_spans = tuple(
-        smooth_span(span, params.smoothing_window_m) for span in filtered_spans
-    )
+    smoothed_spans = tuple(smooth_span(span, params.smoothing_window_m) for span in filtered_spans)
 
     ascent = 0.0
     descent = 0.0

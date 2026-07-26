@@ -145,9 +145,7 @@ async def test_height_preserves_gaps_as_none() -> None:
     """Missing elevation must arrive as None, never as a substituted number."""
     provider = ValhallaProvider(VALHALLA_URL)
     try:
-        samples = await provider.heights(
-            (CLIFDEN.point, LETTERFRACK.point), with_range=True
-        )
+        samples = await provider.heights((CLIFDEN.point, LETTERFRACK.point), with_range=True)
     finally:
         await provider.aclose()
 

@@ -53,9 +53,7 @@ def test_cycle_infrastructure_preference_is_inverted_onto_use_roads(
     provider: ValhallaProvider,
 ) -> None:
     """Valhalla has no cycle-infrastructure option; a low use_roads is the proxy."""
-    options = provider.build_costing_options(
-        CostingPreferences(prefer_cycle_infrastructure=0.9)
-    )
+    options = provider.build_costing_options(CostingPreferences(prefer_cycle_infrastructure=0.9))
 
     assert options["use_roads"] == pytest.approx(0.1)
 
@@ -77,9 +75,7 @@ def test_avoid_bad_surfaces_never_reaches_one(provider: ValhallaProvider) -> Non
     or finish sits on an unpaved lane — common on the Wild Atlantic Way. Surface
     limits are enforced by validation instead, so the value is clamped below 1.
     """
-    options = provider.build_costing_options(
-        CostingPreferences(avoid_bad_surfaces=1.0)
-    )
+    options = provider.build_costing_options(CostingPreferences(avoid_bad_surfaces=1.0))
 
     assert options["avoid_bad_surfaces"] < 1.0
     assert options["avoid_bad_surfaces"] == pytest.approx(0.95)
@@ -100,9 +96,7 @@ def test_ebike_maps_to_hybrid_because_valhalla_has_no_ebike_type(
     provider: ValhallaProvider,
 ) -> None:
     """Documented in §7.2.6: no battery model is implied by the e-bike profile."""
-    options = provider.build_costing_options(
-        CostingPreferences(bicycle_type=BicycleType.EBIKE)
-    )
+    options = provider.build_costing_options(CostingPreferences(bicycle_type=BicycleType.EBIKE))
 
     assert options["bicycle_type"] == "hybrid"
 
@@ -137,18 +131,12 @@ class TestRequestPayload:
         asyncio.run(provider.route(request))
         return captured
 
-    def test_alternates_requested_for_a_two_point_route(
-        self, provider: ValhallaProvider
-    ) -> None:
-        payload = self._payload(
-            provider, RouteRequest(locations=(GALWAY, CLIFDEN), alternates=2)
-        )
+    def test_alternates_requested_for_a_two_point_route(self, provider: ValhallaProvider) -> None:
+        payload = self._payload(provider, RouteRequest(locations=(GALWAY, CLIFDEN), alternates=2))
 
         assert payload["alternates"] == 2
 
-    def test_alternates_omitted_for_a_multipoint_route(
-        self, provider: ValhallaProvider
-    ) -> None:
+    def test_alternates_omitted_for_a_multipoint_route(self, provider: ValhallaProvider) -> None:
         """Upstream documents alternates as unsupported with via points.
 
         Sending the parameter anyway would have the solver believe it asked for

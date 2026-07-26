@@ -1,7 +1,7 @@
 """Application configuration.
 
 Every optional capability in Contour is gated by an explicit setting. When a
-setting is absent the capability reports a :class:`DisabledCapability` naming
+setting is absent the capability reports a :class:`DisabledCapabilityError` naming
 what is missing and how to supply it. Nothing falls back to a default value,
 a cached guess, or fabricated output — see docs/architecture.md, "Disabled
 states", and rule §2.6 (unknown must remain unknown).
@@ -34,7 +34,7 @@ class IntentParserName(StrEnum):
     ANTHROPIC = "anthropic"
 
 
-class DisabledCapability(Exception):
+class DisabledCapabilityError(Exception):
     """Raised when a capability is used without the configuration it requires.
 
     Carries the exact remedy so the API can return it to the user rather than a
@@ -71,7 +71,9 @@ class Settings(BaseSettings):
     )
     redis_url: RedisDsn = Field(default="redis://127.0.0.1:6379/0")  # type: ignore[arg-type]
     api_base_url: str = "http://127.0.0.1:8000"
-    secret_key: str = "change-me-in-every-environment"
+    # Placeholder, not a credential: the app refuses to start in production
+    # with this value. See docs/security.md.
+    secret_key: str = "change-me-in-every-environment"  # noqa: S105
     token_encryption_key: str | None = None
 
     # -- Routing ------------------------------------------------------------
@@ -116,7 +118,7 @@ class Settings(BaseSettings):
     # -- Derived checks -----------------------------------------------------
     def require_valhalla(self) -> str:
         if not self.valhalla_url:
-            raise DisabledCapability(
+            raise DisabledCapabilityError(
                 capability="routing",
                 reason="no Valhalla endpoint is configured",
                 remedy=(
@@ -128,7 +130,7 @@ class Settings(BaseSettings):
 
     def require_elevation(self) -> ElevationProviderName:
         if self.elevation_provider is ElevationProviderName.NONE:
-            raise DisabledCapability(
+            raise DisabledCapabilityError(
                 capability="elevation",
                 reason="no elevation provider is configured",
                 remedy=(
@@ -144,7 +146,7 @@ class Settings(BaseSettings):
         ):
             # Provenance is not optional: an elevation figure without a named
             # source cannot be attributed or its accuracy stated (§11.2).
-            raise DisabledCapability(
+            raise DisabledCapabilityError(
                 capability="elevation",
                 reason="the raster provider has no CONTOUR_ELEVATION_DATASET_ID",
                 remedy=(
@@ -156,7 +158,7 @@ class Settings(BaseSettings):
 
     def require_geocoding(self) -> str:
         if self.geocoding_provider is GeocodingProviderName.NONE or not self.geocoding_url:
-            raise DisabledCapability(
+            raise DisabledCapabilityError(
                 capability="geocoding",
                 reason="no geocoding provider is configured",
                 remedy=(

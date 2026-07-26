@@ -33,9 +33,7 @@ def steady_climb(
     points = []
     distance = 0.0
     while distance <= length_m:
-        points.append(
-            (start_m + distance, start_elevation_m + distance * grade_percent / 100.0)
-        )
+        points.append((start_m + distance, start_elevation_m + distance * grade_percent / 100.0))
         distance += 10.0
     return points
 
@@ -126,9 +124,7 @@ class TestDetection:
         """Climbs found under different parameters are not comparable."""
         points = profile_from(steady_climb(1000.0, 6.0))
 
-        climbs = detect_from_points(
-            points, FINE, ClimbParameters(max_internal_descent_m=15.0)
-        )
+        climbs = detect_from_points(points, FINE, ClimbParameters(max_internal_descent_m=15.0))
 
         assert climbs[0].parameters["max_internal_descent_m"] == 15.0
         assert climbs[0].parameters["min_gain_m"] == 30.0
@@ -159,9 +155,7 @@ class TestCoverageGaps:
     def test_no_climb_is_inferred_across_a_gap(self) -> None:
         """The elevation change inside a hole is unknown, not a climb."""
         before = [(float(i * 10), 0.0) for i in range(50)]
-        hole: list[tuple[float, float | None]] = [
-            (float(500 + i * 10), None) for i in range(30)
-        ]
+        hole: list[tuple[float, float | None]] = [(float(500 + i * 10), None) for i in range(30)]
         after = [(float(800 + i * 10), 200.0) for i in range(50)]
 
         climbs = detect_from_points(profile_from(before + hole + after), FINE)
@@ -171,7 +165,7 @@ class TestCoverageGaps:
 
 class TestSummary:
     def test_superlatives_are_none_when_there_are_no_climbs(self) -> None:
-        """"No climb detected" is not "the longest climb is zero"."""
+        """ "No climb detected" is not "the longest climb is zero"."""
         summary = summarise([])
 
         assert summary["climb_count"] == 0
@@ -206,9 +200,7 @@ class TestStageAssignment:
 
 def test_rolling_terrain_does_not_produce_dozens_of_climbs() -> None:
     """Gentle rollers must not each be named as a climb."""
-    points = profile_from(
-        [(i * 10.0, 100.0 + 8.0 * math.sin(i / 12.0)) for i in range(600)]
-    )
+    points = profile_from([(i * 10.0, 100.0 + 8.0 * math.sin(i / 12.0)) for i in range(600)])
 
     climbs = detect_from_points(points, FINE)
 

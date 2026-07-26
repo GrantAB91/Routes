@@ -138,9 +138,7 @@ class RouteSource(Base, UUIDPrimaryKey, Timestamped):
     # 10-12. Coverage and content
     coverage_description: Mapped[str | None] = mapped_column(Text)
     coverage_area = mapped_column(Geometry("MULTIPOLYGON", srid=4326, spatial_index=True))
-    route_types: Mapped[list[str]] = mapped_column(
-        ARRAY(String(60)), nullable=False, default=list
-    )
+    route_types: Mapped[list[str]] = mapped_column(ARRAY(String(60)), nullable=False, default=list)
     available_attributes: Mapped[list[str]] = mapped_column(
         ARRAY(String(60)), nullable=False, default=list
     )

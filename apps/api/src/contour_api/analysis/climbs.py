@@ -81,9 +81,7 @@ class Climb:
         return self.elevation_gap_m == 0.0
 
 
-def _candidate_runs(
-    span: ElevationSpan, max_internal_descent_m: float
-) -> list[tuple[int, int]]:
+def _candidate_runs(span: ElevationSpan, max_internal_descent_m: float) -> list[tuple[int, int]]:
     """Find maximal rising runs, tolerating dips up to the given depth.
 
     Walks the span once, tracking the highest point reached so far in the
@@ -230,9 +228,7 @@ def _smoothed_spans(profile: ElevationProfile) -> tuple[ElevationSpan, ...]:
     by_distance = {point.distance_m: point for point in profile.smoothed}
     spans: list[ElevationSpan] = []
     for span in profile.spans:
-        points = tuple(
-            by_distance.get(point.distance_m, point) for point in span.points
-        )
+        points = tuple(by_distance.get(point.distance_m, point) for point in span.points)
         spans.append(ElevationSpan(points=points))
     return tuple(spans)
 

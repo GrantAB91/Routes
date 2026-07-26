@@ -176,7 +176,7 @@ class RoutingError(Exception):
         super().__init__(message)
 
 
-class NoRouteFound(RoutingError):
+class NoRouteFoundError(RoutingError):
     """The engine could not connect the requested locations at all.
 
     Distinct from a route that exists but violates a constraint: that is a
@@ -203,7 +203,7 @@ class RoutingProvider(Protocol):
     async def route(self, request: RouteRequest) -> list[RouteCandidate]:
         """Return one or more candidates, best first.
 
-        Raises :class:`NoRouteFound` when no connection exists, and
+        Raises :class:`NoRouteFoundError` when no connection exists, and
         :class:`RoutingError` for engine failures. Returning an empty list is
         not permitted: it is indistinguishable from "no opinion".
         """
