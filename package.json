@@ -1,15 +1,30 @@
 {
-  "name": "routes",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "name": "contour",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Contour — cycling route planning with verifiable provenance",
+  "license": "AGPL-3.0-or-later",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.11.0"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@modelcontextprotocol/server-github": "^2025.4.8"
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @contour/web dev",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @contour/web test:e2e",
+    "test:acceptance:waw": "pnpm --filter @contour/web test:acceptance:waw",
+    "contracts:generate": "pnpm --filter @contour/contracts generate",
+    "api": "uv run --directory apps/api uvicorn contour_api.main:app --reload --port 8000",
+    "api:test": "uv run --directory apps/api pytest",
+    "db:upgrade": "uv run --directory apps/api alembic upgrade head",
+    "db:revision": "uv run --directory apps/api alembic revision --autogenerate -m",
+    "seed:waw": "uv run --directory apps/api python -m contour_api.seeds.wild_atlantic_way"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6",
+    "typescript": "7.0.2"
   }
 }

@@ -1,0 +1,85 @@
+[project]
+name = "contour-api"
+version = "0.1.0"
+description = "Contour API — cycling route planning with verifiable provenance"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "AGPL-3.0-or-later" }
+
+# Version floors are the releases verified against their published metadata on
+# PyPI at build time (see docs/source_registry.md, "Software dependencies").
+dependencies = [
+    "fastapi>=0.140.0",
+    "uvicorn[standard]>=0.40.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.8.0",
+    "sqlalchemy>=2.0.51",
+    "geoalchemy2>=0.20.0",
+    "alembic>=1.18.5",
+    "psycopg[binary,pool]>=3.2.0",
+    "redis>=5.2.0",
+    "arq>=0.26.0",
+    "shapely>=2.1.2",
+    "pyproj>=3.7.2",
+    "httpx>=0.28.0",
+    "structlog>=25.1.0",
+    "python-multipart>=0.0.20",
+    "argon2-cffi>=23.1.0",
+    "cryptography>=44.0.0",
+    "pyjwt>=2.10.0",
+    "gpxpy>=1.6.2",
+    "lxml>=5.3.0",
+    "defusedxml>=0.7.1",
+]
+
+[project.optional-dependencies]
+# Raster DEM support. Kept optional because the ElevationProvider also has a
+# Valhalla /height implementation that needs no raster stack.
+raster = ["rasterio>=1.5.0"]
+# Reading OSM PBF extracts during ingestion.
+osm = ["osmium>=4.0.0"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0.0",
+    "hypothesis>=6.125.0",
+    "respx>=0.22.0",
+    "ruff>=0.9.0",
+    "mypy>=1.15.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/contour_api"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "C4", "S", "RUF"]
+# S101 (assert) is expected in tests; handled by per-file ignores below.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: requires PostGIS, Redis or Valhalla to be running",
+    "acceptance: full Wild Atlantic Way end-to-end flow",
+    "synthetic_fixture: uses clearly-labelled synthetic data, never real-world claims",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
