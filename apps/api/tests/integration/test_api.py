@@ -165,3 +165,76 @@ class TestOpenAPI:
 
         assert "Unknown is a value" in description
         assert "Disabled is not broken" in description
+
+
+class TestImportEndpoint:
+    """Import works today, so it is tested end to end through the API."""
+
+    MINIMAL_GPX = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">'
+        b"<trk><name>Connemara loop</name><trkseg>"
+        b'<trkpt lat="53.4890" lon="-10.0200"><ele>12.4</ele></trkpt>'
+        b'<trkpt lat="53.5497" lon="-9.9469"><ele>21.0</ele></trkpt>'
+        b"</trkseg></trk></gpx>"
+    )
+
+    def test_a_valid_gpx_is_previewed_before_anything_is_derived(self, client: TestClient) -> None:
+        response = client.post(
+            "/v1/imports",
+            files={"file": ("route.gpx", self.MINIMAL_GPX, "application/gpx+xml")},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["name"] == "Connemara loop"
+        assert payload["point_count"] == 2
+        assert payload["has_elevation"] is True
+        assert payload["checksum_sha256"]
+        # The user is told the original survives before they commit to anything.
+        assert any("preserved unchanged" in note for note in payload["notes"])
+
+    def test_absent_elevation_is_reported_rather_than_zero_filled(self, client: TestClient) -> None:
+        gpx = (
+            b'<?xml version="1.0"?>'
+            b'<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">'
+            b'<trk><trkseg><trkpt lat="53.1" lon="-9.1"/><trkpt lat="53.2" lon="-9.2"/>'
+            b"</trkseg></trk></gpx>"
+        )
+
+        payload = client.post(
+            "/v1/imports", files={"file": ("route.gpx", gpx, "application/gpx+xml")}
+        ).json()
+
+        assert payload["has_elevation"] is False
+        assert "elevation" in payload["missing"]
+        assert payload["first_points"][0]["elevation_m"] is None
+
+    def test_a_hostile_file_is_refused_with_a_stable_code(self, client: TestClient) -> None:
+        hostile = b'<!DOCTYPE gpx [<!ENTITY x "y">]><gpx version="1.1"><trk/></gpx>'
+
+        response = client.post(
+            "/v1/imports", files={"file": ("route.gpx", hostile, "application/gpx+xml")}
+        )
+
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "xml_doctype_forbidden"
+
+    def test_an_unimplemented_format_says_so_rather_than_failing_vaguely(
+        self, client: TestClient
+    ) -> None:
+        """§24.3: incomplete support is stated, not implied by a generic error."""
+        response = client.post(
+            "/v1/imports",
+            files={"file": ("route.json", b'{"type":"FeatureCollection"}', "application/json")},
+        )
+
+        assert response.status_code == 422
+        assert "not implemented" in response.json()["error"]["message"]
+
+    def test_limits_declare_which_formats_actually_work(self, client: TestClient) -> None:
+        payload = client.get("/v1/imports/limits").json()
+
+        assert payload["formats"]["gpx"]["read"] is True
+        assert payload["formats"]["fit"]["read"] is False
+        assert payload["formats"]["fit"]["reason"]

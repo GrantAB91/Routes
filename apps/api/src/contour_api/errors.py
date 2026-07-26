@@ -107,7 +107,7 @@ async def handle_no_route_found(request: Request, exc: NoRouteFoundError) -> JSO
     exists and breaks a constraint, which is a 200 with a feasibility verdict.
     """
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=error_body(exc.code, str(exc), request_id=_request_id(request)),
     )
 
@@ -125,7 +125,7 @@ async def handle_routing_error(request: Request, exc: RoutingError) -> JSONRespo
 
 async def handle_file_rejected(request: Request, exc: FileRejectedError) -> JSONResponse:
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=error_body(exc.code.value, str(exc), request_id=_request_id(request)),
     )
 
