@@ -205,13 +205,24 @@ class TestRegistry:
 
 class TestCoverage:
     def test_gaps_name_every_source_contributing_nothing(self) -> None:
+        """The gap list is exactly the sources that are not importable.
+
+        Asserted as a property rather than a fixed membership, so that a source
+        becoming reachable — as OpenStreetMap did once the planet stream
+        replaced the blocked Geofabrik host — moves it out of the gaps without
+        anyone having to remember to edit this test. What must not drift is the
+        rule: a source Contour cannot import is named, every time.
+        """
         report = CoverageReport()
 
         gaps = {gap["source"] for gap in report.gaps()}
-        assert "openstreetmap" in gaps
+        not_importable = {e.slug for e in REGISTRY if not e.is_importable}
+
+        assert gaps == not_importable
         assert "tii-national-cycle-network" in gaps
-        # The only currently importable source is direct upload.
+        # Sources Contour genuinely reads are absent from the gaps.
         assert "user-import" not in gaps
+        assert "openstreetmap" not in gaps
 
     def test_every_gap_gives_a_reason(self) -> None:
         for gap in CoverageReport().gaps():
