@@ -1,3 +1,5 @@
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
 /* Contour base styles.
    Colour is never the only signal (§10.7) and contrast targets WCAG 2.2 AA
    (§16.9), so text sits at 4.5:1 or better against its background and every
@@ -98,6 +100,87 @@ main { padding: 1rem; }
   background: #fdf6e3;
   border-bottom: 1px solid var(--line);
   color: var(--warning);
+}
+
+/* The map itself. MapLibre needs an explicitly sized container: given a
+   height of zero it initialises and renders nothing, with no error. */
+.map-canvas-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+
+.map-canvas {
+  flex: 1;
+  min-height: 420px;
+  width: 100%;
+}
+
+.map-canvas:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+/* Waypoint markers. Sized to the 44px touch target like every other control,
+   because a point that cannot be grabbed cannot be moved. */
+.map-waypoint {
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--accent, #1a5f8b);
+  color: #fff;
+  font: 600 0.8rem/1 system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 40%);
+}
+
+.map-waypoint:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.segment-inspector {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  max-width: min(22rem, calc(100% - 1.5rem));
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 15%);
+  font-size: 0.9rem;
+}
+
+.segment-inspector h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.segment-inspector__distance {
+  margin: 0 0 0.5rem;
+  color: var(--ink-muted, #55606b);
+}
+
+.segment-inspector ul {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+}
+
+.waypoint-list {
+  margin: 0.5rem 0;
+  padding-left: 1.4rem;
+}
+
+.waypoint-list li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
 }
 
 /* Touch targets stay at least 44px (§16.2.3). */

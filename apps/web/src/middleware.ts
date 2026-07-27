@@ -36,7 +36,7 @@ const MAP_HOSTS: Record<string, string> = {
   maptiler: 'https://api.maptiler.com',
 };
 
-export function middleware(request: NextRequest) {
+export function middleware(_request: NextRequest) {
   const provider = process.env.NEXT_PUBLIC_CONTOUR_MAP_PROVIDER ?? 'none';
   // Only a provider that is actually configured widens the policy. An
   // unconfigured basemap must not leave a hole in the CSP for a host the app

@@ -114,8 +114,8 @@ export function ElevationProfile({
 
   const handleKeyDown = (event: React.KeyboardEvent<SVGSVGElement>) => {
     if (points.length === 0) return;
-    let next = focusIndex;
     const step = event.shiftKey ? 10 : 1;
+    let next: number;
 
     switch (event.key) {
       case 'ArrowRight':
@@ -156,6 +156,20 @@ export function ElevationProfile({
     setFocusIndex(next);
     onHoverDistance?.(points[next]!.distanceM);
   };
+
+  // Where the map says the rider is looking. Kept distinct from `focusIndex`,
+  // which is this chart's own keyboard cursor: one is an incoming signal and
+  // the other is local state, and merging them makes each fight the other.
+  const selectedIndex =
+    selectedDistanceM === null
+      ? null
+      : points.reduce<number | null>((best, point, index) => {
+          if (best === null) return index;
+          return Math.abs(point.distanceM - selectedDistanceM) <
+            Math.abs(points[best]!.distanceM - selectedDistanceM)
+            ? index
+            : best;
+        }, null);
 
   const focused = points[focusIndex];
   const coveragePercent =
@@ -248,6 +262,20 @@ export function ElevationProfile({
               <circle cx={x(focused.distanceM)} cy={y(focused.elevationM)} r={4} fill="#111" />
             ) : null}
           </g>
+        ) : null}
+
+        {/* Where the map is pointing, drawn distinctly from this chart's own
+            keyboard cursor so the two are never mistaken for each other. */}
+        {selectedIndex !== null && points[selectedIndex] ? (
+          <line
+            x1={x(points[selectedIndex]!.distanceM)}
+            x2={x(points[selectedIndex]!.distanceM)}
+            y1={padding.top}
+            y2={padding.top + plotHeight}
+            stroke="#1a5f8b"
+            strokeWidth={2}
+            strokeDasharray="4 3"
+          />
         ) : null}
 
         {rangeStart !== null && focused ? (

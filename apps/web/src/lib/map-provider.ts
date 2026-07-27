@@ -24,6 +24,14 @@ export interface BasemapState {
   readonly remedy?: string;
   /** Attribution that must be displayed whenever this basemap is shown (§20.7). */
   readonly attribution?: string;
+  /**
+   * Raster-DEM tile source for the 3D terrain mode, when the provider serves
+   * one. Terrain is a separate product from the basemap — a provider can serve
+   * map tiles and no elevation tiles — so this is set only where terrain tiles
+   * are actually available, and the 3D mode reports its absence rather than
+   * rendering a flat surface that looks like terrain with no relief.
+   */
+  readonly terrainUrl?: string;
 }
 
 /** A style with no sources: Contour's own layers are added on top of this. */
@@ -63,6 +71,8 @@ export function resolveBasemap(env: {
       provider,
       available: true,
       attribution: '© MapTiler © OpenStreetMap contributors',
+      // MapTiler publishes terrain-RGB tiles under the same key.
+      terrainUrl: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${env.maptilerKey}`,
     };
   }
 

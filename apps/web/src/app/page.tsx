@@ -15,10 +15,13 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { ElevationProfile, type ProfilePoint } from '@/components/ElevationProfile';
 import { MapLegend } from '@/components/MapLegend';
+import { RouteMap, type MapSegment } from '@/components/RouteMap';
+import { RouteSummary, type Verdict } from '@/components/RouteSummary';
 import { RouteTopology, type TopologyNode } from '@/components/RouteTopology';
 import { ApiError, apiFetch } from '@/lib/api';
 import { COLOUR_SCALES, MAP_MODES, type MapModeId, mapMode } from '@/lib/map-modes';
 import { basemapStateFromEnv } from '@/lib/map-provider';
+import { generateRoute, type GeneratedRoute, type Waypoint } from '@/lib/route';
 
 interface ParsedField {
   value: unknown;
@@ -77,14 +80,21 @@ export default function PlannerPage() {
   const [busy, setBusy] = useState(false);
   const [modeId, setModeId] = useState<MapModeId>('standard');
   const [hoverDistanceM, setHoverDistanceM] = useState<number | null>(null);
+  const [selectedDistanceM, setSelectedDistanceM] = useState<number | null>(null);
 
   const mode = mapMode(modeId);
   const scale = mode.colourMode ? COLOUR_SCALES[mode.colourMode] : null;
 
-  // No route has been generated yet: routing needs tiles, which need an OSM
-  // extract. The panel says so rather than showing an empty chart.
-  const profilePoints: ProfilePoint[] = [];
-  const topologyNodes: TopologyNode[] = [];
+  const [route, setRoute] = useState<GeneratedRoute | null>(null);
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
+  const [routing, setRouting] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
+
+  // Empty until a route exists. The chart and the map each say so in their own
+  // words rather than rendering an empty frame that reads as a failure.
+  const profilePoints: ProfilePoint[] = route?.profilePoints ?? [];
+  const topologyNodes: TopologyNode[] = route?.topologyNodes ?? [];
+  const segments: MapSegment[] = route?.segments ?? [];
 
   const parse = useCallback(async () => {
     setBusy(true);
@@ -107,6 +117,37 @@ export default function PlannerPage() {
       setBusy(false);
     }
   }, [request]);
+
+  const addWaypoint = useCallback((point: { lat: number; lon: number }) => {
+    setWaypoints((current) => [...current, { ...point, kind: 'break' as const }]);
+  }, []);
+
+  const moveWaypoint = useCallback((index: number, point: { lat: number; lon: number }) => {
+    setWaypoints((current) =>
+      current.map((existing, at) => (at === index ? { ...existing, ...point } : existing)),
+    );
+  }, []);
+
+  const removeWaypoint = useCallback((index: number) => {
+    setWaypoints((current) => current.filter((_, at) => at !== index));
+  }, []);
+
+  const generate = useCallback(async () => {
+    setRouting(true);
+    setRouteError(null);
+    try {
+      setRoute(await generateRoute(waypoints));
+    } catch (caught) {
+      if (caught instanceof ApiError) {
+        setRouteError(caught.remedy ? `${caught.message} ${caught.remedy}` : caught.message);
+      } else {
+        setRouteError('The route could not be generated.');
+      }
+      setRoute(null);
+    } finally {
+      setRouting(false);
+    }
+  }, [waypoints]);
 
   return (
     <div className="planner">
@@ -197,6 +238,87 @@ export default function PlannerPage() {
             ) : null}
           </section>
         ) : null}
+
+        <section aria-labelledby="waypoints-heading">
+          <h2 id="waypoints-heading">Points on the route</h2>
+          <p>
+            No geocoder is configured, so places are not turned into coordinates.
+            Click the map to place a start, a finish and any points to pass through.
+          </p>
+
+          {waypoints.length === 0 ? (
+            <p>Nothing placed yet.</p>
+          ) : (
+            <ol className="waypoint-list">
+              {waypoints.map((point, index) => (
+                <li key={`${point.lat},${point.lon},${index}`}>
+                  <span>
+                    {index === 0
+                      ? 'Start'
+                      : index === waypoints.length - 1
+                        ? 'Finish'
+                        : `Via ${index}`}
+                    : {point.lat.toFixed(4)}, {point.lon.toFixed(4)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeWaypoint(index)}
+                    aria-label={`Remove point ${index + 1}`}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void generate()}
+            disabled={routing || waypoints.length < 2}
+          >
+            {routing ? 'Routing…' : 'Generate route'}
+          </button>
+          {waypoints.length < 2 ? (
+            <p>
+              <small>A route needs at least a start and a finish.</small>
+            </p>
+          ) : null}
+
+          {routeError ? (
+            <p role="alert" style={{ color: 'var(--danger)' }}>
+              {routeError}
+            </p>
+          ) : null}
+        </section>
+
+        {route ? (
+          <>
+            <RouteSummary
+              name="Generated route"
+              originKind="generated"
+              distanceM={route.distanceM}
+              ascentM={route.ascentM}
+              descentM={route.descentM}
+              maxGradePercent={route.maxGradePercent}
+              gradientWindowM={route.gradientWindowM}
+              surfaceCompositionM={route.surfaceCompositionM}
+              verdict={route.validation.verdict as Verdict}
+              violations={route.validation.violations.map((violation) => ({
+                constraintKey: violation.constraint_key,
+                statedAs: violation.stated_as,
+                requested: violation.requested as number | string | null,
+                observed: violation.observed as number | string | null,
+                distanceM: violation.distance_m,
+                detail: violation.detail,
+              }))}
+              unevaluated={route.validation.unevaluated}
+              standingLimitations={route.validation.unavailable_checks}
+              sources={route.sources}
+            />
+            {route.elevationNote ? <p role="note">{route.elevationNote}</p> : null}
+          </>
+        ) : null}
       </div>
 
       <div>
@@ -224,16 +346,31 @@ export default function PlannerPage() {
             </p>
           ) : null}
 
+          {mode.requiresTerrain && !basemap.terrainUrl ? (
+            <p className="map-notice">
+              <strong>No terrain data is configured.</strong> The 3D view needs
+              elevation tiles, which are a separate product from the basemap. The
+              route and its measured elevation profile are unaffected.
+            </p>
+          ) : null}
+
           {mode.isSchematic ? (
             <RouteTopology nodes={topologyNodes} />
           ) : (
-            <div className="map-canvas" aria-label="Map" role="region">
-              <p className="map-notice">
-                <strong>No route has been generated yet.</strong> Route generation needs
-                routing tiles, which are built from an OpenStreetMap extract. The
-                Coverage screen lists what is missing and why.
-              </p>
-            </div>
+            <RouteMap
+              segments={segments}
+              mode={mode}
+              scale={scale}
+              basemap={basemap}
+              hoverDistanceM={hoverDistanceM}
+              waypoints={waypoints}
+              onAddWaypoint={addWaypoint}
+              onMoveWaypoint={moveWaypoint}
+              onRemoveWaypoint={removeWaypoint}
+              onSelectSegment={(segment) =>
+                setSelectedDistanceM(segment ? segment.startDistanceM : null)
+              }
+            />
           )}
         </div>
 
@@ -241,9 +378,10 @@ export default function PlannerPage() {
 
         <ElevationProfile
           points={profilePoints}
-          gapDistanceM={0}
-          ascentM={null}
-          descentM={null}
+          gapDistanceM={route?.elevationGapM ?? 0}
+          ascentM={route?.ascentM ?? null}
+          descentM={route?.descentM ?? null}
+          selectedDistanceM={selectedDistanceM}
           onHoverDistance={setHoverDistanceM}
         />
         <p className="visually-hidden" role="status">
