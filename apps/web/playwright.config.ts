@@ -1,4 +1,30 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * Find a Chromium already on this host.
+ *
+ * Playwright looks for the exact build its pinned version expects. Where an
+ * environment ships its own Chromium under a different build number — sandboxes
+ * and CI images usually do — the suite fails to launch with a message about
+ * installing browsers, which reads as a broken test suite rather than a missing
+ * download. Discovering the installed binary keeps the failure honest: the tests
+ * either run, or they say the browser is genuinely absent.
+ */
+function chromiumPath(): string | undefined {
+  if (process.env.CONTOUR_CHROMIUM_PATH) return process.env.CONTOUR_CHROMIUM_PATH;
+
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (!root) return undefined;
+
+  // The symlink first, then the versioned layout Playwright writes.
+  const candidates = [join(root, 'chromium'), join(root, 'chromium', 'chrome-linux', 'chrome')];
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
+const CHROMIUM = chromiumPath();
 
 /**
  * End-to-end configuration.
@@ -22,21 +48,14 @@ export default defineConfig({
       name: 'desktop',
       use: {
         ...devices['Desktop Chrome'],
-        // CONTOUR_CHROMIUM_PATH points at a Chromium already present on the
-        // host. Environments that ship one (CI images, sandboxes) set it rather
-        // than downloading a second copy for a pinned Playwright version.
-        launchOptions: process.env.CONTOUR_CHROMIUM_PATH
-          ? { executablePath: process.env.CONTOUR_CHROMIUM_PATH }
-          : undefined,
+        launchOptions: CHROMIUM ? { executablePath: CHROMIUM } : undefined,
       },
     },
     {
       name: 'mobile',
       use: {
         ...devices['Pixel 7'],
-        launchOptions: process.env.CONTOUR_CHROMIUM_PATH
-          ? { executablePath: process.env.CONTOUR_CHROMIUM_PATH }
-          : undefined,
+        launchOptions: CHROMIUM ? { executablePath: CHROMIUM } : undefined,
       },
     },
   ],
