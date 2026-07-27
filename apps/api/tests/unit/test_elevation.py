@@ -220,7 +220,34 @@ class TestParameterHonesty:
         )
 
         assert 25.0 not in params.validated().grade_windows_m
-        assert params.dropped_windows() == (25.0,)
+
+    def test_dropped_windows_are_reported_from_the_validated_parameters(self) -> None:
+        """The omission must be visible on the result, not only before it.
+
+        Found by running against a real 30.9 m Copernicus DEM: the 25 m window
+        was correctly dropped but reported as "none dropped", because the check
+        ran against the already-filtered window list and so could never find
+        what had been removed. A silently narrowed analysis is exactly the kind
+        of quiet loss of precision §11.6 asks to be surfaced.
+        """
+        validated = AnalysisParameters(
+            source_resolution_m=30.9,
+            sample_interval_m=30.9,
+            grade_windows_m=(25.0, 100.0, 500.0, 1000.0),
+        ).validated()
+
+        assert validated.dropped_windows() == (25.0,)
+        assert 25.0 not in validated.grade_windows_m
+
+    def test_a_fine_source_drops_nothing(self) -> None:
+        validated = AnalysisParameters(
+            source_resolution_m=5.0,
+            sample_interval_m=5.0,
+            grade_windows_m=(25.0, 100.0),
+        ).validated()
+
+        assert validated.dropped_windows() == ()
+        assert 25.0 in validated.grade_windows_m
 
     def test_fine_source_supports_the_short_window(self) -> None:
         params = AnalysisParameters(

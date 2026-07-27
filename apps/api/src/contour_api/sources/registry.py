@@ -211,10 +211,13 @@ REGISTRY: tuple[RegistryEntry, ...] = (
         name="Copernicus DEM GLO-30",
         owner="European Space Agency",
         publisher="European Union / ESA",
-        documentation_url="https://spacedata.copernicus.eu/collections/copernicus-digital-elevation-model",
-        documentation_evidence=EVIDENCE_NOT_VERIFIED,
-        access_method="Public S3 bucket of GeoTIFF tiles",
-        access_url=None,
+        documentation_url="https://copernicus-dem-30m.s3.amazonaws.com/readme.html",
+        documentation_evidence=(
+            "publisher readme and tileList.txt read directly from the S3 bucket; "
+            "tile geometry and resolution verified by opening the rasters"
+        ),
+        access_method="Public S3 bucket of Cloud-Optimised GeoTIFF tiles",
+        access_url="https://copernicus-dem-30m.s3.amazonaws.com/",
         authentication_method="none for the public mirror",
         licence_identifier="copernicus-dem-eula",
         licence_name="Copernicus DEM licence",
@@ -234,17 +237,25 @@ REGISTRY: tuple[RegistryEntry, ...] = (
         update_method="Static release; replaced wholesale on a new release.",
         last_source_update=None,
         known_quality_limitations=(
-            "30 m horizontal resolution cannot resolve short steep ramps, and "
-            "vertical accuracy is metres rather than centimetres. Contour never "
-            "samples finer than the model supports and never reports gradient "
-            "over a window shorter than the resolution allows "
-            "(docs/elevation_method.md)."
+            "Measured against the installed tiles rather than assumed. The grid "
+            "is not a uniform 30 m: latitude spacing is one arc second (30.9 m) "
+            "and longitude spacing is 1.5 arc seconds in the 50-60 degree band, "
+            "so the limiting cell over Ireland is 30.9 m and Contour clamps "
+            "sampling to it. This cannot resolve short steep ramps. It is also a "
+            "surface model rather than a terrain model: vegetation and buildings "
+            "read high, while sharp summits read LOW because a 30 m cell averages "
+            "the peak away - Croagh Patrick reads 6 m below its published height "
+            "and Mweelrea 45 m below. The second effect is the larger one and "
+            "matters most when judging a col. See docs/elevation_method.md."
         ),
-        connector_status=ConnectorStatus.IMPLEMENTED_BLOCKED_EGRESS,
+        connector_status=ConnectorStatus.ACTIVE,
         connector_key="dem_raster",
-        failure_status=BLOCKED_EGRESS,
+        failure_status=None,
         contact_requirement=(
-            "Read and record the licence terms before enabling export of derived elevation figures."
+            "Tiles are imported and elevation is served, but the licence terms "
+            "have still not been read from the publisher, so export and publish "
+            "of derived elevation figures remain refused. Reading them is the "
+            "single change that would unblock export."
         ),
         staleness_threshold_days=None,
     ),

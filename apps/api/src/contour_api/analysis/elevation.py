@@ -68,6 +68,8 @@ class AnalysisParameters:
     # it; values above usually mean two samples landed on opposite sides of a
     # cliff, a bridge deck, or a DEM seam.
     max_plausible_grade_percent: float = 40.0
+    # Populated by validated(); windows the source cannot support.
+    dropped_windows_m: tuple[float, ...] = ()
 
     def validated(self) -> AnalysisParameters:
         """Return parameters corrected to what the source can actually support.
@@ -86,12 +88,21 @@ class AnalysisParameters:
             sample_interval_m=interval,
             smoothing_window_m=smoothing,
             grade_windows_m=windows or (interval,),
+            # Recorded at the moment of filtering. Recomputing this later cannot
+            # work: by then grade_windows_m no longer contains the windows that
+            # were removed, so the comparison finds nothing and the omission is
+            # reported as "none dropped". Running against a real 30.9 m DEM is
+            # what exposed that — the 25 m window vanished silently.
+            dropped_windows_m=tuple(w for w in self.grade_windows_m if w < interval),
         )
 
     def dropped_windows(self) -> tuple[float, ...]:
-        """Windows the source is too coarse to support, for honest reporting."""
-        interval = max(self.sample_interval_m, self.source_resolution_m)
-        return tuple(w for w in self.grade_windows_m if w < interval)
+        """Windows the source is too coarse to support, for honest reporting.
+
+        Only meaningful on validated parameters; unvalidated ones have not yet
+        dropped anything.
+        """
+        return self.dropped_windows_m
 
 
 @dataclass(frozen=True, slots=True)

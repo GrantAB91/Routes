@@ -24,8 +24,8 @@ Two conventions matter when reading this file:
 
 ## Summary
 
-- 1 of 7 sources are currently importable.
-- 6 source(s) contribute nothing; see below.
+- 2 of 7 sources are currently importable.
+- 5 source(s) contribute nothing; see below.
 - 5 licence(s) are unverified and are therefore refused for export and publish.
 
 ## Gaps
@@ -35,7 +35,6 @@ Two conventions matter when reading this file:
 | OpenStreetMap | `implemented_blocked_egress` | The host is refused by this deployment's network egress policy, so no data has been imported. The connector is implemented and tested against fixtures. |
 | Wild Atlantic Way Route | `implemented_blocked_egress` | The host is refused by this deployment's network egress policy, so no data has been imported. The connector is implemented and tested against fixtures. |
 | Wild Atlantic Way Signature Discovery Points | `implemented_blocked_egress` | The host is refused by this deployment's network egress policy, so no data has been imported. The connector is implemented and tested against fixtures. |
-| Copernicus DEM GLO-30 | `implemented_blocked_egress` | The host is refused by this deployment's network egress policy, so no data has been imported. The connector is implemented and tested against fixtures. |
 | EuroVelo 1 (Atlantic Coast Route) | `not_implemented` | Machine-readable access and licence terms need to be established with the ECF before this source can be imported. |
 | TII National Cycle Network | `not_implemented` | Machine access and licence terms need confirming with TII. Until then this source contributes nothing and is shown as a gap. |
 
@@ -135,9 +134,9 @@ Supplies both the routing graph, via Valhalla tiles, and the segment attributes 
 | --- | --- |
 | 1. Source name | Copernicus DEM GLO-30 |
 | 2. Owner / publisher | European Space Agency / European Union / ESA |
-| 3. Documentation | https://spacedata.copernicus.eu/collections/copernicus-digital-elevation-model |
-|    Evidence for this entry | not verified from the publisher in this environment |
-| 4. Access method | Public S3 bucket of GeoTIFF tiles |
+| 3. Documentation | https://copernicus-dem-30m.s3.amazonaws.com/readme.html |
+|    Evidence for this entry | publisher readme and tileList.txt read directly from the S3 bucket; tile geometry and resolution verified by opening the rasters |
+| 4. Access method | Public S3 bucket of Cloud-Optimised GeoTIFF tiles |
 | 5. Authentication | none for the public mirror |
 | 6. Licence | Copernicus DEM licence (`copernicus-dem-eula`) — **terms not verified** |
 | 7. Required attribution | © DLR e.V. 2010-2014, © Airbus Defence and Space GmbH |
@@ -148,12 +147,12 @@ Supplies both the routing graph, via Valhalla tiles, and the segment attributes 
 | 12. Available attributes | elevation |
 | 13. Update method | Static release; replaced wholesale on a new release. |
 | 14. Last source update | _not established_ |
-| 15. Last successful import | never |
-| 16. Last verification | not verified from the publisher in this environment |
-| 17. Known quality limitations | 30 m horizontal resolution cannot resolve short steep ramps, and vertical accuracy is metres rather than centimetres. Contour never samples finer than the model supports and never reports gradient over a window shorter than the resolution allows (docs/elevation_method.md). |
-| 18. Connector status | `implemented_blocked_egress` |
-| 19. Failure status | The host is refused by this deployment's network egress policy, so no data has been imported. The connector is implemented and tested against fixtures. |
-| 20. Contact / application requirement | Read and record the licence terms before enabling export of derived elevation figures. |
+| 15. Last successful import | — |
+| 16. Last verification | publisher readme and tileList.txt read directly from the S3 bucket; tile geometry and resolution verified by opening the rasters |
+| 17. Known quality limitations | Measured against the installed tiles rather than assumed. The grid is not a uniform 30 m: latitude spacing is one arc second (30.9 m) and longitude spacing is 1.5 arc seconds in the 50-60 degree band, so the limiting cell over Ireland is 30.9 m and Contour clamps sampling to it. This cannot resolve short steep ramps. It is also a surface model rather than a terrain model: vegetation and buildings read high, while sharp summits read LOW because a 30 m cell averages the peak away - Croagh Patrick reads 6 m below its published height and Mweelrea 45 m below. The second effect is the larger one and matters most when judging a col. See docs/elevation_method.md. |
+| 18. Connector status | `active` |
+| 19. Failure status | _not established_ |
+| 20. Contact / application requirement | Tiles are imported and elevation is served, but the licence terms have still not been read from the publisher, so export and publish of derived elevation figures remain refused. Reading them is the single change that would unblock export. |
 
 ### EuroVelo 1 (Atlantic Coast Route)
 

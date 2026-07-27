@@ -24,12 +24,23 @@ The dataset in use is recorded on every sample and shown with every figure.
 without it, because an elevation figure whose source cannot be named cannot have
 its accuracy stated.
 
-**Current state: no elevation provider is configured in this deployment.** The
-DEM host is unreachable under the network policy, so every elevation figure
-reports as unknown rather than being estimated. This is visible on
-`/health/components` and on the Coverage screen.
+**Current state: Copernicus DEM GLO-30 is installed and serving.** Eight 1°×1°
+Cloud-Optimised GeoTIFF tiles covering the Irish west coast (N51–N55, W008–W011)
+are fetched from the publisher's public S3 bucket. `/health/components` reports
+elevation as healthy and names the dataset.
 
 ## 2. Horizontal resolution and sampling
+
+**GLO-30 is not a uniform 30 m grid, and this was measured rather than assumed.**
+Opening the installed tiles shows latitude spacing of one arc second (30.9 m)
+and longitude spacing of 1.5 arc seconds, which is the published banding for
+50–60°N. At 53°N that gives a ground cell of roughly 28 m east–west by 31 m
+north–south. Contour reports the *coarser* axis, since that is what limits what
+can be resolved, and clamps sampling to it.
+
+The provider reads this from the raster's own transform rather than from the
+filename, because the "30" in `Copernicus_DSM_COG_10_...` is arc seconds, not
+metres, and the banding means no single number is correct everywhere.
 
 The sampling interval is derived from the source's native resolution, never
 chosen freely:
@@ -137,8 +148,15 @@ A gradient figure is meaningless without the distance it was measured over: 20%
 over 25 m is a driveway lip, 20% over 1 km is a mountain pass.
 
 Windows shorter than the sampling interval are **dropped, not interpolated**. On
-a 30 m DEM the 25 m window is unsupportable and is not offered; `dropped_windows()`
-reports which were removed so the omission is visible rather than silent.
+the installed 30.9 m DEM the 25 m window is unsupportable and is not offered;
+`dropped_windows()` reports which were removed so the omission is visible rather
+than silent.
+
+That reporting was itself broken until the first run against real data. The
+dropped list was computed from the already-filtered window set, so it could never
+find what had been removed and always answered "none dropped" — a narrowed
+analysis presented as a complete one. The removed windows are now recorded at the
+moment of filtering, and a test pins it.
 
 Gradients beyond `max_plausible_grade_percent` (default 40%) are rejected as
 artefacts and counted. A route with many rejections is one whose elevation data
@@ -186,6 +204,12 @@ can be recomputed against either.
 
 - A 30 m DEM cannot resolve short steep ramps. A 15% pitch over 20 m is invisible
   at that resolution, and Contour cannot report what the model cannot see.
+- **Sharp summits read low, and by more than vegetation reads high.** A 30 m cell
+  averages a peak away. Measured against the installed tiles: Croagh Patrick
+  reads 758 m against a published 764 m (−6 m), and Mweelrea reads 769 m against
+  a published 814 m (−45 m). The rounder the summit the smaller the error. This
+  matters when judging whether a col is rideable, and it is the opposite
+  direction to the surface-model bias below.
 - Bridges and tunnels take the terrain surface's elevation, not the deck's, since
   a DEM models ground. This produces spurious dips and climbs at crossings; the
   median filter removes the worst of them, and the residual is a known error.
@@ -194,6 +218,13 @@ can be recomputed against either.
 - Contour holds no barometric data and does not use recorded elevation from
   uploaded tracks to correct the DEM. Imported elevation is preserved and shown
   as the file's own, separately from Contour's analysis.
+- **A profile is only as good as the geometry it samples.** Sampling a straight
+  line between two towns crosses whatever lies between them: an early test run
+  over Westport–Louisburgh–Leenane produced a 989 m "climb" averaging 40%,
+  because the straight line went up Mweelrea's flank rather than following the
+  road. The elevation code behaved correctly and discarded 46 implausible
+  gradients. Real road geometry comes from the routing engine, and elevation
+  figures should never be quoted from an interpolated corridor.
 
 ## 12. Attribution
 

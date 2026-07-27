@@ -170,11 +170,37 @@ class TestRegistry:
         assert "not a statement" in waw.known_quality_limitations
         assert "cycling" in waw.known_quality_limitations
 
-    def test_the_elevation_source_documents_its_resolution_limits(self) -> None:
+    def test_the_elevation_source_documents_its_measured_resolution_limits(self) -> None:
+        """The entry must record what was measured, not the marketing number.
+
+        "GLO-30" implies a uniform 30 m grid. Opening the installed tiles shows
+        one arc second of latitude and 1.5 arc seconds of longitude, so the
+        limiting cell over Ireland is 30.9 m. The entry says so.
+        """
         dem = entry("copernicus-dem-glo-30")
 
-        assert "30 m" in dem.known_quality_limitations
-        assert "never samples finer" in dem.known_quality_limitations
+        assert "30.9 m" in dem.known_quality_limitations
+        assert "arc second" in dem.known_quality_limitations
+
+    def test_the_elevation_source_records_the_summit_under_read(self) -> None:
+        """A 30 m cell averages sharp peaks away, and by more than foliage adds.
+
+        This direction of error is the one that matters for judging a col, and
+        it is the opposite of the surface-model bias most documentation mentions.
+        """
+        dem = entry("copernicus-dem-glo-30")
+
+        assert "surface model" in dem.known_quality_limitations
+        assert "Mweelrea" in dem.known_quality_limitations
+
+    def test_an_active_source_with_unverified_terms_still_blocks_export(self) -> None:
+        """Importing data does not establish the right to redistribute it."""
+        dem = entry("copernicus-dem-glo-30")
+
+        assert dem.is_importable
+        assert not dem.licence_verified
+        assert dem.redistribution is RedistributionPermission.UNKNOWN
+        assert "remain refused" in (dem.contact_requirement or "")
 
 
 class TestCoverage:
