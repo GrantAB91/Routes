@@ -112,7 +112,7 @@ class ScriptedAttributor:
     def __init__(self, provider: ScriptedProvider) -> None:
         self._provider = provider
 
-    def attribute(self, candidate: RouteCandidate) -> RouteView:
+    async def attribute(self, candidate: RouteCandidate) -> RouteView:
         return RouteView(
             segments=tuple(self._provider.current),
             origin=ORIGIN,

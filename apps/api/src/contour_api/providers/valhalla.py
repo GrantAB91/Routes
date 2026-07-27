@@ -25,6 +25,7 @@ recorded here because they are easy to forget and expensive to rediscover:
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -65,9 +66,99 @@ _DEFAULT_AVOID_BAD_SURFACES = 0.25
 # See note 3 in the module docstring.
 _MAX_AVOID_BAD_SURFACES = 0.95
 
+# Valhalla's `service_limits.trace` defaults, which infra/valhalla/make-config.sh
+# leaves alone. They are an order of magnitude tighter than the bicycle routing
+# limits, so a route the engine will happily compute is one it will refuse to
+# trace in a single call.
+_TRACE_MAX_SHAPE = 16_000
+_TRACE_MAX_DISTANCE_M = 200_000.0
+
+# Kept below the server's ceilings rather than at them: the limits are compared
+# against the shape as the engine measures it, and a chunk sized exactly to the
+# limit can tip over on rounding.
+_TRACE_SHAPE_SAFETY = 0.9
+
 
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
+
+
+@dataclass(frozen=True, slots=True)
+class TracedEdge:
+    """One edge of a routed shape, as ``/trace_attributes`` reported it.
+
+    ``way_id`` is the point of the whole exercise: it is the join key onto
+    Contour's imported network, and therefore the only route by which a
+    generated geometry acquires attributes from a named source.
+
+    The ``engine_*`` fields are kept deliberately prefixed. They are the
+    engine's own reading of the same underlying data, and they are *evidence*
+    about how the route was costed — never a source. Contour does not present
+    them as attributes: ``Surface`` is documented upstream as a "Generalized
+    representation", and ``CycleLane::kNone`` means "no specified bicycle lane",
+    which conflates surveyed-absent with never-surveyed. Substituting either for
+    a real observation would manufacture exactly the certainty §2.6 forbids.
+    """
+
+    way_id: int | None
+    graph_edge_id: str | None
+    distance_m: float
+    begin_shape_index: int
+    end_shape_index: int
+    use: str | None = None
+    engine_road_class: str | None = None
+    engine_surface: str | None = None
+    engine_cycle_lane: str | None = None
+    engine_speed_limit: int | None = None
+
+    @property
+    def is_ferry_by_engine(self) -> bool:
+        """Whether the engine costed this edge as a ferry.
+
+        Structural rather than attributive: it says which part of the graph the
+        route used, which is why it is safe to read where a surface value is not.
+        """
+        return self.use in {"ferry", "rail-ferry"}
+
+
+def _chunk_shape(
+    coordinates: tuple[LatLon, ...],
+    max_shape: int,
+    max_chunk_m: float,
+) -> list[tuple[int, tuple[LatLon, ...]]]:
+    """Split a shape into overlapping windows within the trace limits.
+
+    Consecutive windows share their boundary point. Without the overlap the edge
+    spanning a boundary is dropped from both windows, leaving an unattributed
+    hole every 200 km — which would read as genuinely unsurveyed road rather
+    than as a request that was chopped up.
+    """
+    # Imported here rather than at module scope: routing.validation imports
+    # from providers.routing, so a top-level import would close a cycle.
+    from ..routing.validation import haversine_m
+
+    limit = max(2, int(max_shape * _TRACE_SHAPE_SAFETY))
+    budget = max_chunk_m * _TRACE_SHAPE_SAFETY
+
+    chunks: list[tuple[int, tuple[LatLon, ...]]] = []
+    start = 0
+    cursor = 0.0
+
+    for index in range(1, len(coordinates)):
+        cursor += haversine_m(coordinates[index - 1], coordinates[index])
+        too_long = cursor >= budget
+        too_many = index - start + 1 >= limit
+        if too_long or too_many:
+            chunks.append((start, coordinates[start : index + 1]))
+            # Restart *at* this point, not after it, so the shared vertex keeps
+            # the two windows contiguous.
+            start = index
+            cursor = 0.0
+
+    if start < len(coordinates) - 1:
+        chunks.append((start, coordinates[start:]))
+
+    return chunks
 
 
 class ValhallaProvider:
@@ -259,6 +350,94 @@ class ValhallaProvider:
         if not trip:
             raise RoutingError("malformed_response", "Valhalla returned no matched trip")
         return self._parse_trip(trip, data)
+
+    async def trace_edges(
+        self,
+        coordinates: tuple[LatLon, ...],
+        preferences: CostingPreferences,
+        *,
+        max_shape: int = _TRACE_MAX_SHAPE,
+        max_chunk_m: float = _TRACE_MAX_DISTANCE_M,
+    ) -> list[TracedEdge]:
+        """Recover per-edge identity for a shape the engine itself produced.
+
+        ``/route`` does not report which OSM way each part of a route came from,
+        so a returned geometry carries no handle onto Contour's own attributes.
+        ``/trace_attributes`` does report it, as ``edge.way_id``, and with
+        ``shape_match=edge_walk`` it walks the exact edges rather than
+        re-matching — which is correct here precisely because the shape came
+        from a prior Valhalla route (the engine's own words: "this algorithm
+        requires nearly exact shape matching, so it should only be used when the
+        shape is from a prior Valhalla route").
+
+        The call is chunked because trace has its own service limits, far tighter
+        than routing's: ``trace.max_distance`` is 200 km against bicycle's
+        1,000 km, and ``trace.max_shape`` is 16,000 points. The Wild Atlantic Way
+        is roughly 2,500 km, so an unchunked call would be rejected outright —
+        or worse, on a differently configured server, silently truncated.
+
+        ``edge_walk`` is used without a map-matching fallback on purpose. If the
+        walk fails, the honest outcome is fewer attributed edges, not a snapped
+        approximation of a route the engine already computed exactly; snapping
+        would attribute segments from ways the route does not actually use.
+        """
+        if len(coordinates) < 2:
+            return []
+
+        attributes = [
+            "edge.way_id",
+            "edge.id",
+            "edge.length",
+            "edge.begin_shape_index",
+            "edge.end_shape_index",
+            "edge.use",
+            "edge.road_class",
+            "edge.surface",
+            "edge.cycle_lane",
+            "edge.speed_limit",
+            "edge.travel_mode",
+        ]
+
+        traced: list[TracedEdge] = []
+        for chunk_start, chunk in _chunk_shape(coordinates, max_shape, max_chunk_m):
+            payload: dict[str, Any] = {
+                "shape": [{"lat": p.lat, "lon": p.lon} for p in chunk],
+                "costing": "bicycle",
+                "costing_options": {"bicycle": self.build_costing_options(preferences)},
+                "shape_match": "edge_walk",
+                "filters": {"attributes": attributes, "action": "include"},
+                "directions_options": {"units": "kilometers"},
+            }
+            try:
+                data = await self._post("/trace_attributes", payload)
+            except NoRouteFoundError:
+                # 443 is the documented "edge_walk failed to find exact route
+                # match" code. The chunk contributes nothing; the segments it
+                # would have covered stay unattributed, which is visible in the
+                # route's unknown share rather than hidden.
+                continue
+
+            # Indices are into the shape trace returns, which for edge_walk is
+            # the chunk it was given. Offsetting by the chunk's start keeps them
+            # pointing at the right place in the whole route.
+            for edge in data.get("edges") or []:
+                way_id = edge.get("way_id")
+                traced.append(
+                    TracedEdge(
+                        way_id=int(way_id) if way_id is not None else None,
+                        graph_edge_id=str(edge["id"]) if edge.get("id") is not None else None,
+                        distance_m=float(edge.get("length", 0.0)) * 1000.0,
+                        begin_shape_index=chunk_start + int(edge.get("begin_shape_index", 0)),
+                        end_shape_index=chunk_start + int(edge.get("end_shape_index", 0)),
+                        use=edge.get("use"),
+                        engine_road_class=edge.get("road_class"),
+                        engine_surface=edge.get("surface"),
+                        engine_cycle_lane=edge.get("cycle_lane"),
+                        engine_speed_limit=edge.get("speed_limit"),
+                    )
+                )
+
+        return traced
 
     async def heights(
         self, points: tuple[LatLon, ...], *, with_range: bool = True

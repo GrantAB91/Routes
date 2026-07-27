@@ -44,9 +44,13 @@ class SegmentAttributor(Protocol):
     edges the engine used. It is a seam so that the loop can be tested without a
     database, and so that attribution stays the responsibility of Contour's own
     data rather than of whatever the engine happened to report.
+
+    Asynchronous because the production implementation makes two round trips per
+    attempt — one to the engine for edge identity, one to PostGIS for the
+    attributes — and the solve loop runs it once per attempt.
     """
 
-    def attribute(self, candidate: RouteCandidate) -> RouteView: ...
+    async def attribute(self, candidate: RouteCandidate) -> RouteView: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,7 +141,7 @@ class RouteSolver:
                 raise
 
             candidate = candidates[0]
-            route = self.attributor.attribute(candidate)
+            route = await self.attributor.attribute(candidate)
             exhausted = attempt >= self.max_attempts
             validation = validator.validate(
                 route, resolve_attempts=attempt, exhausted_attempts=exhausted

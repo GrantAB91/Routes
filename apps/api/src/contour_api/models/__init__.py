@@ -26,6 +26,7 @@ from .enums import (
 from .intent import RouteConstraint, RouteIntent
 from .jobs import ExportJob, ImportJob, UserReport
 from .journey import JourneyProject, PointOfInterest, Stage
+from .network import NetworkWay
 from .route import (
     AvoidArea,
     BicycleRouteMembership,
@@ -64,6 +65,7 @@ __all__ = [
     "ImportJob",
     "JourneyProject",
     "KnowledgeStatus",
+    "NetworkWay",
     "Organisation",
     "PointOfInterest",
     "RedistributionPermission",
