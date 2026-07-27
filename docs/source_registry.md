@@ -24,15 +24,14 @@ Two conventions matter when reading this file:
 
 ## Summary
 
-- 2 of 7 sources are currently importable.
-- 5 source(s) contribute nothing; see below.
+- 3 of 7 sources are currently importable.
+- 4 source(s) contribute nothing; see below.
 - 5 licence(s) are unverified and are therefore refused for export and publish.
 
 ## Gaps
 
 | Source | Status | Why |
 | --- | --- | --- |
-| OpenStreetMap | `implemented_blocked_egress` | The host is refused by this deployment's network egress policy, so no data has been imported. The connector is implemented and tested against fixtures. |
 | Wild Atlantic Way Route | `implemented_blocked_egress` | The host is refused by this deployment's network egress policy, so no data has been imported. The connector is implemented and tested against fixtures. |
 | Wild Atlantic Way Signature Discovery Points | `implemented_blocked_egress` | The host is refused by this deployment's network egress policy, so no data has been imported. The connector is implemented and tested against fixtures. |
 | EuroVelo 1 (Atlantic Coast Route) | `not_implemented` | Machine-readable access and licence terms need to be established with the ECF before this source can be imported. |
@@ -50,7 +49,7 @@ Two conventions matter when reading this file:
 | 2. Owner / publisher | OpenStreetMap contributors / OpenStreetMap Foundation |
 | 3. Documentation | https://www.openstreetmap.org/copyright |
 |    Evidence for this entry | web search result summary; publisher page not directly reachable |
-| 4. Access method | Regional extract (.osm.pbf) via Geofabrik |
+| 4. Access method | Planet dump streamed from the AWS Open Data mirror and filtered to Ireland in flight by osmium extract, so the 91 GB source is never stored (infra/valhalla/extract-from-planet.sh). Geofabrik's regional extract is the usual route and is refused by this deployment's egress policy. |
 | 5. Authentication | none |
 | 6. Licence | Open Database License 1.0 (`ODbL-1.0`) |
 | 7. Required attribution | © OpenStreetMap contributors |
@@ -61,14 +60,14 @@ Two conventions matter when reading this file:
 | 12. Available attributes | bicycle access, surface, smoothness, tracktype, cycleway, network membership, maxspeed, highway class, lit, width, bridge, tunnel, ford, barrier, oneway, access conditions |
 | 13. Update method | Full extract replacement; incremental updates supported upstream. |
 | 14. Last source update | _not established_ |
-| 15. Last successful import | never |
+| 15. Last successful import | — |
 | 16. Last verification | web search result summary; publisher page not directly reachable |
 | 17. Known quality limitations | Coverage of surface and access tags is uneven. Rural Irish lanes are frequently untagged, which Contour reports as unknown rather than filling in. Tag meaning varies by contributor and region. |
-| 18. Connector status | `implemented_blocked_egress` |
-| 19. Failure status | The host is refused by this deployment's network egress policy, so no data has been imported. The connector is implemented and tested against fixtures. |
+| 18. Connector status | `active` |
+| 19. Failure status | _not established_ |
 | 20. Contact / application requirement | _not established_ |
 
-Supplies both the routing graph, via Valhalla tiles, and the segment attributes Contour validates against.
+Supplies both the routing graph, via Valhalla tiles, and the segment attributes Contour validates against. The extract is clipped with osmium's `simple` strategy, which is single-pass and therefore the only one that works on a stream; ways crossing the bounding box lose their outside nodes and are dropped, so the box is padded into open sea and across the border rather than drawn at the coastline.
 
 ### Wild Atlantic Way Route
 

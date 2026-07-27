@@ -66,6 +66,12 @@ logger = logging.getLogger(__name__)
 # reporting how much of the network was surveyed.
 NEGLIGIBLE_LENGTH_M = 2.0
 
+# How pyosmium caches node coordinates while the ways are read. `flex_mem` keeps
+# them in RAM and grows as needed, which suits a country-sized extract. A larger
+# region needs a disk-backed store — `sparse_file_array,<path>` — because the
+# cache, not the file, is what runs a host out of memory.
+DEFAULT_LOCATION_STORAGE = "flex_mem"
+
 # The attributes whose presence or absence decides `attribute_completeness`.
 # Deliberately the ones that change a routing decision, not every tag OSM has.
 _COMPLETENESS_ATTRIBUTES = (
@@ -414,6 +420,7 @@ def read_ways(
     *,
     memberships: dict[int, list[NetworkRef]] | None = None,
     counters: ImportCounters | None = None,
+    location_storage: str = DEFAULT_LOCATION_STORAGE,
 ) -> Iterator[WayRecord]:
     """Yield every routable way in the extract, with geometry.
 
@@ -425,7 +432,16 @@ def read_ways(
     memberships = memberships or {}
     counters = counters or ImportCounters()
 
-    processor = osmium.FileProcessor(str(path), osmium.osm.WAY).with_locations()
+    # Nodes must be *read* for their locations to be cached, so the entity mask
+    # includes them and a filter drops them again before they reach this loop.
+    # Restricting the mask to WAY alone fails outright — "Nodes not read from
+    # file. Cannot enable location cache." — because a way in a PBF carries node
+    # references, not coordinates.
+    processor = (
+        osmium.FileProcessor(str(path), osmium.osm.NODE | osmium.osm.WAY)
+        .with_locations(location_storage)
+        .with_filter(osmium.filter.EntityFilter(osmium.osm.WAY))
+    )
 
     for way in processor:
         tags = dict(way.tags)
@@ -542,6 +558,7 @@ class OsmNetworkImporter:
 
     session: AsyncSession
     batch_size: int = 2000
+    location_storage: str = DEFAULT_LOCATION_STORAGE
     counters: ImportCounters = field(default_factory=ImportCounters)
 
     async def run(
@@ -602,7 +619,12 @@ class OsmNetworkImporter:
             ).all()
 
             now = datetime.now(UTC)
-            stream = read_ways(path, memberships=memberships, counters=self.counters)
+            stream = read_ways(
+                path,
+                memberships=memberships,
+                counters=self.counters,
+                location_storage=self.location_storage,
+            )
             for batch in _batched(stream, self.batch_size):
                 await self.session.execute(
                     insert(NetworkWay),

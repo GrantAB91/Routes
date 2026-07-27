@@ -40,8 +40,14 @@ class ElevationProvider(Protocol):
 
     async def health(self) -> HealthReport: ...
 
-    def sample(self, points: tuple[LatLon, ...]) -> list[float | None]:
-        """Elevation in metres per point, ``None`` where not known."""
+    async def sample(self, points: tuple[LatLon, ...]) -> list[float | None]:
+        """Elevation in metres per point, ``None`` where not known.
+
+        Asynchronous because a provider may reach the network to answer. The
+        raster implementation reads local files and does no awaiting; the shape
+        is the protocol's, so a network-backed source can satisfy it without
+        every caller having to know which kind it holds.
+        """
         ...
 
     def resolution_m(self, at: LatLon) -> float | None:
@@ -182,7 +188,7 @@ class RasterElevationProvider:
         lon_m = lon_deg * 3600.0 * _METRES_PER_ARCSEC_LAT * math.cos(math.radians(at.lat))
         return max(lat_m, lon_m)
 
-    def sample(self, points: tuple[LatLon, ...]) -> list[float | None]:
+    async def sample(self, points: tuple[LatLon, ...]) -> list[float | None]:
         """Sample every point, grouping by tile to avoid reopening files.
 
         Points outside coverage and nodata cells both return ``None``. They are

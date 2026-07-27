@@ -84,8 +84,14 @@ REGISTRY: tuple[RegistryEntry, ...] = (
         publisher="OpenStreetMap Foundation",
         documentation_url="https://www.openstreetmap.org/copyright",
         documentation_evidence=EVIDENCE_SEARCH,
-        access_method="Regional extract (.osm.pbf) via Geofabrik",
-        access_url="https://download.geofabrik.de/europe/ireland-and-northern-ireland-latest.osm.pbf",
+        access_method=(
+            "Planet dump streamed from the AWS Open Data mirror and filtered to "
+            "Ireland in flight by osmium extract, so the 91 GB source is never "
+            "stored (infra/valhalla/extract-from-planet.sh). Geofabrik's regional "
+            "extract is the usual route and is refused by this deployment's "
+            "egress policy."
+        ),
+        access_url="https://osm-pds.s3.amazonaws.com/",
         authentication_method="none",
         licence_identifier="ODbL-1.0",
         licence_name="Open Database License 1.0",
@@ -125,14 +131,18 @@ REGISTRY: tuple[RegistryEntry, ...] = (
             "frequently untagged, which Contour reports as unknown rather than "
             "filling in. Tag meaning varies by contributor and region."
         ),
-        connector_status=ConnectorStatus.IMPLEMENTED_BLOCKED_EGRESS,
+        connector_status=ConnectorStatus.ACTIVE,
         connector_key="osm_pbf",
-        failure_status=BLOCKED_EGRESS,
+        failure_status=None,
         contact_requirement=None,
         staleness_threshold_days=30,
         notes=(
             "Supplies both the routing graph, via Valhalla tiles, and the segment "
-            "attributes Contour validates against."
+            "attributes Contour validates against. The extract is clipped with "
+            "osmium's `simple` strategy, which is single-pass and therefore the "
+            "only one that works on a stream; ways crossing the bounding box lose "
+            "their outside nodes and are dropped, so the box is padded into open "
+            "sea and across the border rather than drawn at the coastline."
         ),
     ),
     RegistryEntry(

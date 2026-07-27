@@ -124,7 +124,11 @@ class RouteSource(Base, UUIDPrimaryKey, Timestamped):
     documentation_evidence: Mapped[str | None] = mapped_column(Text)
 
     # 4-5. Access and authentication
-    access_method: Mapped[str | None] = mapped_column(String(120))
+    # Text rather than a short label: how a source is actually reached is often
+    # a sentence, not a word. Contour reaches OSM by streaming the planet
+    # through a filter because the regional extract host is blocked, and a
+    # column too narrow to say so would force the entry to be less true.
+    access_method: Mapped[str | None] = mapped_column(Text)
     access_url: Mapped[str | None] = mapped_column(Text)
     authentication_method: Mapped[str | None] = mapped_column(String(120))
 
@@ -165,6 +169,11 @@ class RouteSource(Base, UUIDPrimaryKey, Timestamped):
 
     # 20. Contact or application requirement
     contact_requirement: Mapped[str | None] = mapped_column(Text)
+
+    # Anything else the registry entry recorded about this source. Persisted so
+    # the registry module, docs/source_registry.md and this table hold the same
+    # thing; without it the seeder would silently drop a field it had.
+    notes: Mapped[str | None] = mapped_column(Text)
 
     licence: Mapped[SourceLicence | None] = relationship(back_populates="sources")
     attributions: Mapped[list[SourceAttribution]] = relationship(

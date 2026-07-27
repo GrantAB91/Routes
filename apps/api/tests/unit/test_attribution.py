@@ -7,6 +7,8 @@ refusal to let the routing engine's own generalisations stand in for a survey.
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import pytest
 
 from contour_api.models.enums import (
@@ -67,7 +69,7 @@ class TestDistances:
         )
 
         assert [s.index for s in segments] == [0, 1, 2]
-        for previous, following in zip(segments, segments[1:], strict=False):
+        for previous, following in pairwise(segments):
             assert following.start_distance_m == pytest.approx(previous.end_distance_m)
 
     def test_total_distance_matches_the_shape(self) -> None:
@@ -90,9 +92,7 @@ class TestDistances:
         whole = segments_from_traced_edges([edge(7, 0, 3)], SHAPE, {})
         split = segments_from_traced_edges([edge(7, 0, 1), edge(7, 1, 3)], SHAPE, {})
 
-        assert sum(s.distance_m for s in split) == pytest.approx(
-            sum(s.distance_m for s in whole)
-        )
+        assert sum(s.distance_m for s in split) == pytest.approx(sum(s.distance_m for s in whole))
         assert sum(s.distance_m for s in split) == pytest.approx(_geometric_length_m(SHAPE))
 
     def test_each_segment_carries_its_own_geometry(self) -> None:
@@ -193,7 +193,7 @@ class TestTraceChunking:
         chunks = _chunk_shape(SHAPE, 3, _TRACE_MAX_DISTANCE_M)
 
         assert len(chunks) > 1
-        for (_, first), (start, second) in zip(chunks, chunks[1:], strict=False):
+        for (_, first), (start, second) in pairwise(chunks):
             assert first[-1] == second[0]
             assert SHAPE[start] == second[0]
 

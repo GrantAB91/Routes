@@ -77,7 +77,7 @@ class TestConfiguration:
 
 @requires_dem
 class TestRealTerrain:
-    def test_resolution_is_read_from_the_file_not_assumed(self, provider) -> None:
+    async def test_resolution_is_read_from_the_file_not_assumed(self, provider) -> None:
         """GLO-30 is not a uniform 30 m grid, and the name does not say so.
 
         Latitude spacing is one arc second; longitude spacing widens in bands
@@ -91,21 +91,21 @@ class TestRealTerrain:
         assert resolution is not None
         assert 28.0 < resolution < 34.0
 
-    def test_a_known_summit_reads_close_to_its_published_height(self, provider) -> None:
+    async def test_a_known_summit_reads_close_to_its_published_height(self, provider) -> None:
         # Croagh Patrick, published 764 m.
-        value = provider.sample((LatLon(lat=53.7601, lon=-9.6591),))[0]
+        value = (await provider.sample((LatLon(lat=53.7601, lon=-9.6591),)))[0]
 
         assert value is not None
         assert abs(value - 764) < 30
 
-    def test_sea_level_reads_near_zero(self, provider) -> None:
+    async def test_sea_level_reads_near_zero(self, provider) -> None:
         # Clew Bay, open water.
-        value = provider.sample((LatLon(lat=53.8300, lon=-9.7000),))[0]
+        value = (await provider.sample((LatLon(lat=53.8300, lon=-9.7000),)))[0]
 
         assert value is not None
         assert -5.0 < value < 20.0
 
-    def test_a_point_outside_coverage_is_unknown_not_a_neighbour(self, provider) -> None:
+    async def test_a_point_outside_coverage_is_unknown_not_a_neighbour(self, provider) -> None:
         """The failure this prevents is the worst kind: a plausible wrong number.
 
         Sampling outside the installed tiles must not fall through to whatever
@@ -113,12 +113,12 @@ class TestRealTerrain:
         analysis accumulates around it instead of across it.
         """
         # Mid-Atlantic, far outside any installed tile.
-        assert provider.sample((LatLon(lat=53.5, lon=-25.0),))[0] is None
+        assert (await provider.sample((LatLon(lat=53.5, lon=-25.0),)))[0] is None
 
-    def test_resolution_is_unknown_outside_coverage(self, provider) -> None:
+    async def test_resolution_is_unknown_outside_coverage(self, provider) -> None:
         assert provider.resolution_m(LatLon(lat=53.5, lon=-25.0)) is None
 
-    def test_a_batch_spanning_two_tiles_is_sampled_correctly(self, provider) -> None:
+    async def test_a_batch_spanning_two_tiles_is_sampled_correctly(self, provider) -> None:
         """Points are grouped by tile, so a route crossing a boundary must work."""
         points = (
             LatLon(lat=53.7601, lon=-9.6591),  # N53 W010
@@ -126,7 +126,7 @@ class TestRealTerrain:
             LatLon(lat=53.5000, lon=-25.0),  # no coverage
         )
 
-        values = provider.sample(points)
+        values = await provider.sample(points)
 
         assert values[0] is not None
         assert values[1] is not None
