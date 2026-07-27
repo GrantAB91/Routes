@@ -193,6 +193,46 @@ class TestAttachment:
         assert payload["method"]["sample_interval_m"] == pytest.approx(30.0)
         assert payload["notes"], "widening the interval must be stated"
 
+    async def test_segment_and_route_gradients_share_one_window(self) -> None:
+        """The invariant a real 30.9 m DEM broke before this was fixed.
+
+        Segment grades were measured sample-to-sample while the headline used
+        the analysis window, so a route reported a 10.2% maximum while its own
+        segments claimed 18.6%. Both were arithmetically correct and the pair
+        was unusable: a violation could not be explained against the number the
+        rider had been shown. The route's maximum must be no smaller than the
+        steepest segment, because they are now the same measurement.
+        """
+        result = await attach_elevation(a_route(4), FakeElevation(rise_per_metre=0.06))
+
+        measured = [
+            segment.max_grade_percent
+            for segment in result.route.segments
+            if segment.max_grade_percent is not None
+        ]
+        assert measured, "the fixture must produce measurable segments"
+        assert result.profile.max_grade_percent is not None
+        assert max(measured) <= result.profile.max_grade_percent + 0.51
+
+    async def test_the_gradient_window_is_reported_with_the_gradients(self) -> None:
+        """§11.4: a gradient without its window is not comparable with anything."""
+        result = await attach_elevation(a_route(), FakeElevation(rise_per_metre=0.04))
+
+        assert result.gradient_window_m > 0
+        assert result.as_dict()["method"]["gradient_window_m"] == result.gradient_window_m
+
+    async def test_a_segment_shorter_than_the_window_is_still_measured(self) -> None:
+        """Segments are where the routing graph split a road, often 75 m.
+
+        Confining the window inside the segment would leave nearly every one
+        unmeasurable and the gradient constraint permanently unevaluable, which
+        reads as missing data rather than as the arrangement of edges it is.
+        """
+        result = await attach_elevation(a_route(8), FakeElevation(rise_per_metre=0.05))
+
+        measured = [s for s in result.route.segments if s.elevation_status is KnowledgeStatus.KNOWN]
+        assert len(measured) == len(result.route.segments)
+
     async def test_the_elevation_source_is_named_on_the_route(self) -> None:
         result = await attach_elevation(a_route(), FakeElevation())
 

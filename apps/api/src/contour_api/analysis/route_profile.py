@@ -141,6 +141,16 @@ class RouteElevation:
     sample_interval_m: float
     notes: tuple[str, ...] = ()
 
+    @property
+    def gradient_window_m(self) -> float:
+        """The window every gradient here was measured over.
+
+        One value for the route and for each of its segments. A figure without
+        it is not comparable with anything (§11.4).
+        """
+        windows = self.profile.parameters.grade_windows_m
+        return min(windows) if windows else self.sample_interval_m
+
     def as_dict(self) -> dict:
         """The profile as the API reports it.
 
@@ -169,6 +179,7 @@ class RouteElevation:
             },
             "method": {
                 "sample_interval_m": self.sample_interval_m,
+                "gradient_window_m": self.gradient_window_m,
                 "smoothing_window_m": self.profile.parameters.smoothing_window_m,
                 "min_gain_threshold_m": self.profile.parameters.min_gain_threshold_m,
                 "grade_windows_m": list(self.profile.parameters.grade_windows_m),
@@ -190,26 +201,80 @@ def _segment_grade(
     smoothed: tuple[ElevationPoint, ...],
     start_m: float,
     end_m: float,
+    window_m: float,
 ) -> tuple[float | None, float]:
-    """Steepest absolute grade within a distance window, and its covered length.
+    """Steepest grade over ``window_m`` anywhere on this segment, and its coverage.
 
-    Both are needed: the grade is what the constraint checks, and the covered
-    length is what distinguishes "flat" from "not measured here".
+    The window is the point of this function. Measuring sample-to-sample instead
+    — which is what an earlier version of this did — produces a *different*
+    measurement from the route-level figure, and running it against a real
+    30.9 m DEM showed how badly: the route reported a 10.2% maximum while
+    individual segments claimed 18.6%. Both were arithmetically right and the
+    pair was unusable, because a violation could not be explained against the
+    number the rider had been shown. §11.4 requires a gradient to travel with
+    its window; it follows that two gradients shown together must share one.
+
+    The window is allowed to extend past the segment's own ends. A segment is an
+    artefact of where the routing graph happens to split a road — often 75 m,
+    shorter than the window — and the rider still climbs whatever the road does
+    there. Confining the window inside the segment would report almost every
+    segment as unmeasurable and leave the gradient constraint permanently
+    unevaluable, which reads as missing data rather than as the arrangement of
+    edges it actually is.
+
+    Returns the steepest grade and how much of the segment had elevation
+    coverage. Both are needed: the grade is what the constraint checks, and the
+    coverage is what distinguishes flat ground from ground nobody measured.
     """
-    inside = [p for p in smoothed if start_m <= p.distance_m <= end_m and p.elevation_m is not None]
-    if len(inside) < 2:
+    measured = [p for p in smoothed if p.elevation_m is not None]
+    if len(measured) < 2:
+        return None, 0.0
+
+    covered = 0.0
+    for a, b in pairwise(measured):
+        overlap = min(b.distance_m, end_m) - max(a.distance_m, start_m)
+        if overlap > 0:
+            covered += overlap
+
+    if covered <= 0:
         return None, 0.0
 
     steepest: float | None = None
-    covered = 0.0
-    for a, b in pairwise(inside):
-        run = b.distance_m - a.distance_m
+    end_index = 0
+    for start_index, origin in enumerate(measured):
+        # Every window that overlaps the segment counts, including one starting
+        # just before it and one ending just after.
+        if origin.distance_m > end_m:
+            break
+
+        target = origin.distance_m + window_m
+        if end_index < start_index:
+            end_index = start_index
+        while end_index < len(measured) and measured[end_index].distance_m < target:
+            end_index += 1
+        if end_index >= len(measured):
+            break
+
+        far = measured[end_index]
+        if far.distance_m < start_m:
+            continue
+
+        run = far.distance_m - origin.distance_m
         if run <= 0:
             continue
-        covered += run
-        grade = abs((b.elevation_m - a.elevation_m) / run * 100.0)  # type: ignore[operator]
+        grade = abs((far.elevation_m - origin.elevation_m) / run * 100.0)  # type: ignore[operator]
         if steepest is None or grade > steepest:
             steepest = grade
+
+    if steepest is None:
+        # The route is shorter than one window. Measuring end to end is the
+        # only honest reading, and it is still reported over a stated distance.
+        run = measured[-1].distance_m - measured[0].distance_m
+        if run <= 0:
+            return None, covered
+        steepest = abs(
+            (measured[-1].elevation_m - measured[0].elevation_m) / run * 100.0  # type: ignore[operator]
+        )
 
     return steepest, covered
 
@@ -250,10 +315,18 @@ async def attach_elevation(
     # segment that the route-level analysis has already rejected as noise.
     smoothed = profile.smoothed or points
 
+    # The same window the route-level maximum uses, so a segment's gradient and
+    # the headline figure are the same measurement rather than two.
+    window_m = (
+        min(profile.parameters.grade_windows_m)
+        if profile.parameters.grade_windows_m
+        else interval_m
+    )
+
     segments: list[SegmentView] = []
     for segment in route.segments:
         grade, covered_m = _segment_grade(
-            smoothed, segment.start_distance_m, segment.end_distance_m
+            smoothed, segment.start_distance_m, segment.end_distance_m, window_m
         )
         # Partial coverage is not coverage. Requiring most of the segment to be
         # measured stops one sampled metre at the edge of a DEM hole from

@@ -86,9 +86,7 @@ class TestConstraintTranslation:
     def test_motorways_are_prohibited_by_default_and_can_be_extended(self) -> None:
         constraint = next(
             c
-            for c in Constraints(
-                prohibited_road_classes=[RoadClass.MOTORWAY, RoadClass.TRUNK]
-            )
+            for c in Constraints(prohibited_road_classes=[RoadClass.MOTORWAY, RoadClass.TRUNK])
             .to_set()
             .constraints
             if isinstance(c, ProhibitedRoadClasses)
@@ -97,9 +95,7 @@ class TestConstraintTranslation:
         assert RoadClass.TRUNK in constraint.classes
 
     def test_access_checking_can_be_turned_off_only_explicitly(self) -> None:
-        assert LegalBicycleAccess not in kinds(
-            Constraints(require_legal_bicycle_access=False)
-        )
+        assert LegalBicycleAccess not in kinds(Constraints(require_legal_bicycle_access=False))
 
 
 class TestRequestValidation:
@@ -115,9 +111,7 @@ class TestRequestValidation:
     def test_an_a_to_a_request_is_rejected_with_an_explanation(self) -> None:
         """A loop needs to say where it should go; otherwise it is zero metres."""
         with pytest.raises(ValueError, match="via point"):
-            GenerateRequest(
-                locations=[Point(lat=53.0, lon=-9.0), Point(lat=53.0, lon=-9.0)]
-            )
+            GenerateRequest(locations=[Point(lat=53.0, lon=-9.0), Point(lat=53.0, lon=-9.0)])
 
     def test_a_loop_through_a_via_point_is_accepted(self) -> None:
         request = GenerateRequest(

@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .db import dispose_engine
 from .errors import EXCEPTION_HANDLERS
-from .routers import coverage, health, imports, intent, routes
+from .routers import coverage, exports, health, imports, intent, routes
 
 DESCRIPTION = """
 Contour plans cycling routes from sources it can name, and says plainly what it
@@ -78,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(coverage.router)
     app.include_router(imports.router)
     app.include_router(routes.router)
+    app.include_router(exports.router)
 
     return app
 
