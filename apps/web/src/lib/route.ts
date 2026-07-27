@@ -74,7 +74,8 @@ interface GeneratePayload {
     ascent_m: number | null;
     descent_m: number | null;
     coverage: { ratio: number; gap_distance_m: number; complete: boolean };
-    max_grade_percent: number | null;
+    max_climb_percent: number | null;
+    max_gradient_percent: number | null;
     notes: string[];
     method: Record<string, unknown>;
   } | null;
@@ -238,7 +239,8 @@ export async function generateRoute(
     topologyNodes: topologyFrom(payload),
     ascentM: payload.elevation?.ascent_m ?? null,
     descentM: payload.elevation?.descent_m ?? null,
-    maxGradePercent: payload.elevation?.max_grade_percent ?? null,
+    // The direction-agnostic figure: what the gradient constraint checks.
+    maxGradePercent: payload.elevation?.max_gradient_percent ?? null,
     gradientWindowM: windowFrom(payload),
     elevationGapM: payload.elevation?.coverage.gap_distance_m ?? 0,
     elevationNote: payload.elevation ? null : (payload.elevation_note ?? null),

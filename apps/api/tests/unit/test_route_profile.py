@@ -181,7 +181,8 @@ class TestAttachment:
         payload = result.as_dict()
 
         assert payload["ascent_m"] is None
-        assert payload["max_grade_percent"] is None
+        assert payload["max_climb_percent"] is None
+        assert payload["max_gradient_percent"] is None
 
     async def test_the_method_is_reported_with_the_figures(self) -> None:
         """§11.3: a profile without its parameters cannot be checked."""
@@ -213,6 +214,31 @@ class TestAttachment:
         assert measured, "the fixture must produce measurable segments"
         assert result.profile.max_grade_percent is not None
         assert max(measured) <= result.profile.max_grade_percent + 0.51
+
+    async def test_climb_and_gradient_are_named_separately(self) -> None:
+        """§11.4: a gradient must state its window, and its direction.
+
+        On a real route the headline read 15.9% while a violation said
+        "steepest 26.5%" and nothing explained how both were true. They measure
+        different things — steepest ascent, and steepest stretch either way —
+        so both are reported under names that say which is which.
+        """
+        result = await attach_elevation(a_route(4), FakeElevation(rise_per_metre=0.07))
+        payload = result.as_dict()
+
+        assert payload["max_climb_percent"] is not None
+        assert payload["max_gradient_percent"] is not None
+        # The direction-agnostic figure can never be the smaller of the two.
+        assert payload["max_gradient_percent"] >= payload["max_climb_percent"] - 0.51
+
+    async def test_the_direction_agnostic_figure_is_what_the_constraint_checks(self) -> None:
+        """It comes from the segments, so the two cannot drift apart."""
+        result = await attach_elevation(a_route(4), FakeElevation(rise_per_metre=0.05))
+        steepest = max(
+            s.max_grade_percent for s in result.route.segments if s.max_grade_percent is not None
+        )
+
+        assert result.max_gradient_percent == pytest.approx(steepest)
 
     async def test_the_gradient_window_is_reported_with_the_gradients(self) -> None:
         """§11.4: a gradient without its window is not comparable with anything."""

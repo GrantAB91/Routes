@@ -223,7 +223,7 @@ class PostgisSegmentAttributor:
         if len(coordinates) < 2:
             raise ValueError("cannot attribute a route with no geometry")
 
-        edges = await self.provider.trace_edges(coordinates, self.preferences)
+        edges = await self.provider.trace_candidate(candidate, self.preferences)
         attributes = await self._attributes_for(
             {edge.way_id for edge in edges if edge.way_id is not None}
         )

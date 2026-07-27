@@ -78,6 +78,11 @@ _TRACE_MAX_DISTANCE_M = 200_000.0
 # limit can tip over on rounding.
 _TRACE_SHAPE_SAFETY = 0.9
 
+# How many times a failing stretch is halved before the remainder is left
+# unattributed. Eight halvings take a 90 km leg down to roughly 350 m, which is
+# a small enough gap to report honestly and not worth further round trips.
+_TRACE_MAX_BISECTIONS = 8
+
 
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
@@ -358,6 +363,7 @@ class ValhallaProvider:
         *,
         max_shape: int = _TRACE_MAX_SHAPE,
         max_chunk_m: float = _TRACE_MAX_DISTANCE_M,
+        index_offset: int = 0,
     ) -> list[TracedEdge]:
         """Recover per-edge identity for a shape the engine itself produced.
 
@@ -380,6 +386,10 @@ class ValhallaProvider:
         walk fails, the honest outcome is fewer attributed edges, not a snapped
         approximation of a route the engine already computed exactly; snapping
         would attribute segments from ways the route does not actually use.
+
+        ``index_offset`` shifts every returned shape index, so a caller tracing
+        one leg of a multi-leg route gets indices into the whole route's shape.
+        :meth:`trace_candidate` is what callers should normally use.
         """
         if len(coordinates) < 2:
             return []
@@ -400,42 +410,125 @@ class ValhallaProvider:
 
         traced: list[TracedEdge] = []
         for chunk_start, chunk in _chunk_shape(coordinates, max_shape, max_chunk_m):
-            payload: dict[str, Any] = {
-                "shape": [{"lat": p.lat, "lon": p.lon} for p in chunk],
-                "costing": "bicycle",
-                "costing_options": {"bicycle": self.build_costing_options(preferences)},
-                "shape_match": "edge_walk",
-                "filters": {"attributes": attributes, "action": "include"},
-                "directions_options": {"units": "kilometers"},
-            }
-            try:
-                data = await self._post("/trace_attributes", payload)
-            except NoRouteFoundError:
-                # 443 is the documented "edge_walk failed to find exact route
-                # match" code. The chunk contributes nothing; the segments it
-                # would have covered stay unattributed, which is visible in the
-                # route's unknown share rather than hidden.
-                continue
+            traced.extend(
+                await self._walk(chunk, chunk_start + index_offset, preferences, attributes)
+            )
 
-            # Indices are into the shape trace returns, which for edge_walk is
-            # the chunk it was given. Offsetting by the chunk's start keeps them
-            # pointing at the right place in the whole route.
-            for edge in data.get("edges") or []:
-                way_id = edge.get("way_id")
-                traced.append(
-                    TracedEdge(
-                        way_id=int(way_id) if way_id is not None else None,
-                        graph_edge_id=str(edge["id"]) if edge.get("id") is not None else None,
-                        distance_m=float(edge.get("length", 0.0)) * 1000.0,
-                        begin_shape_index=chunk_start + int(edge.get("begin_shape_index", 0)),
-                        end_shape_index=chunk_start + int(edge.get("end_shape_index", 0)),
-                        use=edge.get("use"),
-                        engine_road_class=edge.get("road_class"),
-                        engine_surface=edge.get("surface"),
-                        engine_cycle_lane=edge.get("cycle_lane"),
-                        engine_speed_limit=edge.get("speed_limit"),
-                    )
+        return traced
+
+    async def _walk(
+        self,
+        shape: tuple[LatLon, ...],
+        offset: int,
+        preferences: CostingPreferences,
+        attributes: list[str],
+        *,
+        depth: int = 0,
+    ) -> list[TracedEdge]:
+        """Walk one stretch of shape, halving it if the walk cannot complete.
+
+        ``edge_walk`` is all-or-nothing per request: one unwalkable spot returns
+        443 for the whole thing. On a 287 km Wild Atlantic Way section that cost
+        an entire 90 km leg — 31% of the route unattributed because of a single
+        point somewhere in it.
+
+        Splitting on failure recovers everything that *is* walkable and isolates
+        what is not to a progressively smaller stretch. The alternative upstream
+        offers is ``walk_or_snap``, which is declined deliberately: snapping
+        invents a path through edges the route may never have used, and every
+        attribute Contour then reported would be about the wrong road. Leaving a
+        short stretch unattributed is a gap the route reports; snapping it is a
+        fabrication the route cannot detect.
+        """
+        if len(shape) < 2:
+            return []
+
+        payload: dict[str, Any] = {
+            "shape": [{"lat": p.lat, "lon": p.lon} for p in shape],
+            "costing": "bicycle",
+            "costing_options": {"bicycle": self.build_costing_options(preferences)},
+            "shape_match": "edge_walk",
+            "filters": {"attributes": attributes, "action": "include"},
+            "directions_options": {"units": "kilometers"},
+        }
+
+        try:
+            data = await self._post("/trace_attributes", payload)
+        except NoRouteFoundError:
+            # Below this the halves are too short to be worth another round
+            # trip, and whatever is left unattributed is a few tens of metres.
+            if depth >= _TRACE_MAX_BISECTIONS or len(shape) < 8:
+                return []
+
+            middle = len(shape) // 2
+            # The halves share their boundary vertex, for the same reason the
+            # chunks do: without it the edge spanning the split is lost twice.
+            head = await self._walk(
+                shape[: middle + 1], offset, preferences, attributes, depth=depth + 1
+            )
+            tail = await self._walk(
+                shape[middle:], offset + middle, preferences, attributes, depth=depth + 1
+            )
+            return head + tail
+
+        # Indices are into the shape trace was given, so offsetting by where
+        # that shape starts keeps them pointing at the whole route.
+        return [
+            TracedEdge(
+                way_id=int(edge["way_id"]) if edge.get("way_id") is not None else None,
+                graph_edge_id=str(edge["id"]) if edge.get("id") is not None else None,
+                distance_m=float(edge.get("length", 0.0)) * 1000.0,
+                begin_shape_index=offset + int(edge.get("begin_shape_index", 0)),
+                end_shape_index=offset + int(edge.get("end_shape_index", 0)),
+                use=edge.get("use"),
+                engine_road_class=edge.get("road_class"),
+                engine_surface=edge.get("surface"),
+                engine_cycle_lane=edge.get("cycle_lane"),
+                engine_speed_limit=edge.get("speed_limit"),
+            )
+            for edge in data.get("edges") or []
+        ]
+
+    async def trace_candidate(
+        self,
+        candidate: RouteCandidate,
+        preferences: CostingPreferences,
+    ) -> list[TracedEdge]:
+        """Recover edge identity for a whole route, one leg at a time.
+
+        Legs are traced separately because the concatenated shape is not a path
+        the engine can walk. At a ``break`` location the route is permitted to
+        turn around, so the joined line can double back on itself, and
+        ``edge_walk`` — which follows connected edges — then fails on the entire
+        request rather than on the part that doubles back.
+
+        This was not theoretical. A 287 km, five-leg Wild Atlantic Way section
+        returned *zero* attributed segments while the same code attributed a
+        single-leg 22 km route perfectly. The validator caught it and reported
+        zero length with a NOT_FEASIBLE verdict rather than a confident route
+        with no attributes, but the cause was here.
+
+        Indices are offset per leg so they address the route's own shape — what
+        :attr:`RouteCandidate.coordinates` returns, and what the attributor
+        slices to give each segment its geometry.
+        """
+        offset = 0
+        traced: list[TracedEdge] = []
+
+        for index, leg in enumerate(candidate.legs):
+            if len(leg.coordinates) >= 2:
+                traced.extend(
+                    await self.trace_edges(leg.coordinates, preferences, index_offset=offset)
                 )
+
+            # `RouteCandidate.coordinates` drops a leg's first point when it
+            # repeats the previous leg's last. The offset has to be computed the
+            # same way, or every index after the first leg is out by one.
+            advance = len(leg.coordinates)
+            previous = candidate.legs[index - 1].coordinates if index > 0 else ()
+            if previous and leg.coordinates and previous[-1] == leg.coordinates[0]:
+                advance -= 1
+            offset += advance
 
         return traced
 

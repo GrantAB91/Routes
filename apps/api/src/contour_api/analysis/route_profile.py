@@ -142,6 +142,23 @@ class RouteElevation:
     notes: tuple[str, ...] = ()
 
     @property
+    def max_gradient_percent(self) -> float | None:
+        """Steepest stretch in either direction, over the analysis window.
+
+        Taken from the segments rather than recomputed, so it is by construction
+        the same measurement the gradient constraint evaluates. A route where
+        this exceeds a limit while ``max_climb_percent`` does not is one whose
+        steepest ground is downhill — true, worth showing, and not a
+        contradiction.
+        """
+        grades = [
+            segment.max_grade_percent
+            for segment in self.route.segments
+            if segment.max_grade_percent is not None
+        ]
+        return max(grades) if grades else None
+
+    @property
     def gradient_window_m(self) -> float:
         """The window every gradient here was measured over.
 
@@ -164,7 +181,19 @@ class RouteElevation:
             "min_elevation_m": _rounded(self.profile.min_elevation_m),
             "max_elevation_m": _rounded(self.profile.max_elevation_m),
             "net_elevation_change_m": _rounded(self.profile.net_elevation_change_m),
-            "max_grade_percent": _rounded(self.profile.max_grade_percent, 1),
+            # Two different questions, so two named answers. `max_climb_percent`
+            # is the steepest sustained *ascent*: what a rider going this way
+            # has to push up. `max_gradient_percent` is the steepest stretch in
+            # either direction, and it is what the gradient constraint checks,
+            # because a 26% descent is still a 26% road.
+            #
+            # Reporting only one of them was actively confusing on a real route:
+            # the headline read 15.9% while a violation said "steepest 26.5%",
+            # and nothing on the page explained how both could be true. §11.4
+            # asks that a gradient state its window; it equally has to state
+            # which direction it is about.
+            "max_climb_percent": _rounded(self.profile.max_grade_percent, 1),
+            "max_gradient_percent": _rounded(self.max_gradient_percent, 1),
             "sustained_grade_percent": {
                 f"{window:g}": round(value, 1)
                 for window, value in self.profile.sustained_grade_percent.items()
