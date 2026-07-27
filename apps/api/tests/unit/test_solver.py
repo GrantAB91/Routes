@@ -23,9 +23,11 @@ from contour_api.providers.routing import (
 from contour_api.routing.constraints import ConstraintSet, MaxGradient
 from contour_api.routing.model import RouteView, SegmentView
 from contour_api.routing.solver import (
+    MAX_EXCLUDE_LOCATIONS,
     AlternativeGenerator,
     AlternativeProfile,
     RouteSolver,
+    _exclusion_points,
     wild_atlantic_way_profiles,
 )
 
@@ -279,3 +281,72 @@ def test_the_reference_project_defines_four_distinct_profiles() -> None:
     assert all(p.selection_reason for p in profiles)
     # And they must actually differ in what they ask the engine for.
     assert len({repr(p.preferences) for p in profiles}) == 4
+
+
+def make_route(*, segment_count: int, distances: tuple[float, ...] | None = None) -> RouteView:
+    """A connected route of `segment_count` segments, optionally uneven."""
+    lengths = distances or tuple(1000.0 for _ in range(segment_count))
+    points = [
+        LatLon(
+            lat=ORIGIN.lat + (DESTINATION.lat - ORIGIN.lat) * i / segment_count,
+            lon=ORIGIN.lon + (DESTINATION.lon - ORIGIN.lon) * i / segment_count,
+        )
+        for i in range(segment_count + 1)
+    ]
+    cursor = 0.0
+    segments = []
+    for index in range(segment_count):
+        segments.append(
+            SegmentView(
+                index=index,
+                start_distance_m=cursor,
+                distance_m=lengths[index],
+                coordinates=(points[index], points[index + 1]),
+            )
+        )
+        cursor += lengths[index]
+    return RouteView(segments=tuple(segments), origin=ORIGIN, destination=DESTINATION)
+
+
+class TestExclusionLimit:
+    """The engine's ceiling is a hard rejection, not a truncation."""
+
+    def test_more_violations_than_the_engine_accepts_are_capped(self) -> None:
+        """A real Irish route produced 297 segments and failed outright.
+
+        Valhalla's `max_exclude_locations` is 200, and exceeding it rejects the
+        whole request rather than dropping the extras. The loop has to stay
+        under the ceiling rather than discover it.
+        """
+        route = make_route(segment_count=300)
+
+        points = _exclusion_points(route, set(range(300)))
+
+        assert len(points) == MAX_EXCLUDE_LOCATIONS
+
+    def test_the_longest_violations_are_excluded_first(self) -> None:
+        """Each slot should remove as much offending distance as possible."""
+        route = make_route(segment_count=4, distances=(10.0, 5000.0, 20.0, 4000.0))
+
+        points = _exclusion_points(route, {0, 1, 2, 3}, limit=2)
+        chosen = {(round(p.lat, 5), round(p.lon, 5)) for p in points}
+        expected = {
+            (round(s.midpoint.lat, 5), round(s.midpoint.lon, 5))
+            for s in route.segments
+            if s.index in {1, 3}
+        }
+
+        assert chosen == expected
+
+    def test_the_order_of_the_excluded_points_follows_the_route(self) -> None:
+        """Sorted by distance to choose, restored to route order to send."""
+        route = make_route(segment_count=4, distances=(10.0, 5000.0, 20.0, 4000.0))
+
+        points = _exclusion_points(route, {0, 1, 2, 3}, limit=2)
+
+        assert points[0].lat < points[1].lat
+
+    def test_a_route_within_the_limit_is_untouched(self) -> None:
+        route = make_route(segment_count=5)
+
+        assert len(_exclusion_points(route, {0, 2, 4})) == 3

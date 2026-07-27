@@ -19,6 +19,7 @@ incident. Collapsing them wakes someone at 3am for a working system.
 from __future__ import annotations
 
 import shutil
+import tarfile
 from pathlib import Path
 from typing import Any
 
@@ -91,13 +92,28 @@ async def _routing() -> dict[str, Any]:
 
 
 def _tile_count(tile_dir: str) -> int:
+    """How many graph tiles are actually built.
+
+    Valhalla either writes loose ``.gph`` files or packs them into a tar
+    extract. Counting the tar as one tile — which this did — reports "1" for a
+    283-tile Ireland build, and a reader seeing that would reasonably conclude
+    the build had barely produced anything. The archive is opened and its
+    members counted so the number means what it says.
+    """
     path = Path(tile_dir)
     if not path.is_dir():
         return 0
-    # Valhalla writes graph tiles as .gph files, or packs them into a tar
-    # extract; either counts as coverage.
-    if (path / "tiles.tar").exists():
-        return 1
+
+    archive = path / "tiles.tar"
+    if archive.exists():
+        try:
+            with tarfile.open(archive) as tar:
+                return sum(1 for name in tar.getnames() if name.endswith(".gph"))
+        except (tarfile.TarError, OSError):
+            # A tar that cannot be read is not evidence of tiles. Falling back
+            # to the loose count says what is genuinely on disk.
+            pass
+
     return sum(1 for _ in path.rglob("*.gph"))
 
 

@@ -19,6 +19,7 @@ constraints comes back with the reason rather than silently relaxed (§12.3).
 from __future__ import annotations
 
 from typing import Annotated, Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -304,14 +305,24 @@ def _headers(name: str, extension: str, decision) -> dict[str, str]:
     # produce "---.gpx", which is a filename in form only.
     safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in name)[:80]
     safe = "-".join(part for part in safe.split("-") if part) or "route"
-    headers = {
-        "content-disposition": f'attachment; filename="{safe}.{extension}"',
-        # Read by clients that show the credit beside a download.
-        "x-contour-attribution": "; ".join(
+
+    attribution = (
+        "; ".join(
             source.attribution_text or source.source_name
             for source in decision.required_attributions
         )
-        or "none required",
+        or "none required"
+    )
+
+    headers = {
+        "content-disposition": f'attachment; filename="{safe}.{extension}"',
+        # Percent-encoded UTF-8. HTTP header values are latin-1 on the wire, so
+        # sending "© OpenStreetMap contributors" raw puts a bare 0xA9 in the
+        # header and every UTF-8 client reads mojibake — which for an
+        # attribution string is a licence obligation rendered wrong. The
+        # authoritative copy is inside the file either way; this header is a
+        # convenience for clients showing a credit beside a download.
+        "x-contour-attribution": quote(attribution, safe="; -_.~"),
     }
     if decision.share_alike_required:
         headers["x-contour-share-alike"] = (

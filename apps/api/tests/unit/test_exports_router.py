@@ -9,6 +9,7 @@ rather than as sea level.
 from __future__ import annotations
 
 import json
+from urllib.parse import unquote
 
 import pytest
 
@@ -89,8 +90,20 @@ class TestHeaders:
         decision = evaluate(Action.EXPORT, [OSM])
         headers = _headers("Westport to Louisburgh", "gpx", decision)
 
-        assert "OpenStreetMap" in headers["x-contour-attribution"]
+        assert "OpenStreetMap" in unquote(headers["x-contour-attribution"])
         assert "same licence" in headers["x-contour-share-alike"].lower()
+
+    def test_the_attribution_header_is_ascii_safe(self) -> None:
+        """A bare © lands on the wire as latin-1 0xA9 and reads as mojibake.
+
+        For an attribution string that is a licence obligation rendered wrong,
+        so the header is percent-encoded UTF-8 and decodes back exactly.
+        """
+        headers = _headers("route", "gpx", evaluate(Action.EXPORT, [OSM]))
+        value = headers["x-contour-attribution"]
+
+        value.encode("ascii")  # raises if anything non-ASCII survived
+        assert unquote(value) == "© OpenStreetMap contributors"
 
     def test_the_filename_cannot_escape_its_directory(self) -> None:
         headers = _headers("../../etc/passwd", "gpx", evaluate(Action.EXPORT, [OSM]))

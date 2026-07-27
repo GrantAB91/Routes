@@ -88,22 +88,47 @@ def _violating_distance(validation: ValidationOutcome) -> float:
     )
 
 
-def _exclusion_points(route: RouteView, indices: set[int]) -> tuple[LatLon, ...]:
-    """Pick one point per violating segment to exclude.
+#: Valhalla's ``service_limits.max_exclude_locations``. Exceeding it is a hard
+#: rejection of the whole request, not a truncation, so the loop has to stay
+#: under it rather than discover it. Found the way these things usually are:
+#: a real Irish route produced 297 segments, roughly half of them unsurveyed,
+#: and asking to avoid all of them failed outright with "Exceeded max avoid
+#: locations: 200".
+MAX_EXCLUDE_LOCATIONS = 200
+
+
+def _exclusion_points(
+    route: RouteView,
+    indices: set[int],
+    *,
+    limit: int = MAX_EXCLUDE_LOCATIONS,
+) -> tuple[LatLon, ...]:
+    """Pick one point per violating segment to exclude, within the engine's limit.
 
     Upstream documents ``exclude_locations`` as "much more efficient" than
     polygons for avoiding a handful of specific roads, and each location is
     snapped to the roads nearest it. Using a segment's midpoint rather than an
     endpoint matters: endpoints are shared with the neighbouring segments, so
     excluding one would take out roads the route legitimately needs.
+
+    When more segments violate than the engine will accept, the longest are
+    excluded first. That is the ordering that removes the most offending
+    distance per slot, and it is a deliberate choice rather than whichever
+    happened to come first in the list. The caller is told how many were left
+    out, because a loop that silently asks for less than it needs would report
+    a failure to converge as though the engine had refused.
     """
-    points: list[LatLon] = []
-    for segment in route.segments:
-        if segment.index in indices:
-            midpoint = segment.midpoint
-            if midpoint is not None:
-                points.append(midpoint)
-    return tuple(points)
+    violating = [
+        segment
+        for segment in route.segments
+        if segment.index in indices and segment.midpoint is not None
+    ]
+    if len(violating) > limit:
+        violating.sort(key=lambda segment: segment.distance_m, reverse=True)
+        violating = violating[:limit]
+        violating.sort(key=lambda segment: segment.index)
+
+    return tuple(segment.midpoint for segment in violating if segment.midpoint is not None)
 
 
 @dataclass
@@ -177,9 +202,20 @@ class RouteSolver:
             if not violating or exhausted:
                 break
 
+            # The budget is what is left of the engine's ceiling after the
+            # exclusions already carried, including any the caller supplied.
+            # Asking for more is not a truncation upstream, it is a rejection of
+            # the entire request.
+            remaining = MAX_EXCLUDE_LOCATIONS - len(exclusions.locations)
+            if remaining <= 0:
+                # Every slot the engine offers is already spent. Another pass
+                # would send the same request, so the closest attempt so far is
+                # the answer, and the verdict says the attempts were exhausted.
+                break
+
             new_points = tuple(
                 point
-                for point in _exclusion_points(route, violating)
+                for point in _exclusion_points(route, violating, limit=remaining)
                 if (round(point.lat, 6), round(point.lon, 6)) not in already_excluded
             )
             if not new_points:
