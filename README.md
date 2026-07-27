@@ -23,34 +23,74 @@ present a constraint as met when the data needed to check it does not exist.
 | Upload validation, GPX import and export with round-trip tests | Working |
 | Multi-day stage planning and rebalancing | Working |
 | Source registry, licence engine, coverage reporting | Working |
-| Web app: planner, coverage screen, elevation profile, topology view, 12 map modes | Working |
-| **Route generation on real geography** | **Blocked — needs routing tiles** |
-| **Wild Atlantic Way reference project** | **Blocked — needs the official geometry** |
+| OSM network import: 1.47 M ways, three-state attributes | Working |
+| Route generation, alternatives, validation and comparison over HTTP | Working |
+| Web app: planner with map, waypoint editing, coverage screen, elevation profile | Partial — see below |
+| **Wild Atlantic Way official geometry** | **Blocked — publisher unreachable; OSM's mapping used instead, labelled as such** |
 
-The blocked items are blocked on data, not code. See
-[Getting real data in](#getting-real-data-in).
+### What the web app does not do yet
+
+The API is substantially complete; the interface in front of it is not. Missing:
+the route library and search (§14), journey and stage screens (§12), the climb
+inspector (§11.7), Simple/Expert modes (§3.2), and most of §9.1's editing verbs —
+today you can add, drag and remove waypoints, and that is all. Basemap, satellite,
+topographic and 3D terrain modes need a tile provider that is not configured here.
+Use `/docs` for the parts that have no UI yet.
 
 ## Running it
 
-Requires PostgreSQL 16 with PostGIS, Redis, Node 22+, pnpm, Python 3.12+ and uv.
+Requires Node 22+, pnpm, Python 3.12+, uv, and Docker.
 
 ```bash
-# Build the routing engine from source (~20-45 minutes)
-sudo ./infra/valhalla/build.sh
-./infra/valhalla/make-config.sh
-
-# Start PostGIS, Redis and Valhalla
-./infra/scripts/dev-up.sh
-
-# Database
-cp .env.example .env          # then edit
-pnpm db:upgrade
-
-# API and web app
+git clone <this repo> && cd Routes
+cp .env.example .env                                    # then edit; see below
 pnpm install
-pnpm api                      # http://127.0.0.1:8000  (/docs for OpenAPI)
-pnpm dev                      # http://127.0.0.1:3000
+
+# PostGIS, Redis and Valhalla. Valhalla downloads an OSM extract and builds its
+# routing graph on first start — allow 20-60 minutes and watch the logs. Nothing
+# routes until it finishes, and /health/components says so plainly.
+docker compose -f infra/compose/docker-compose.yml up -d
+docker compose -f infra/compose/docker-compose.yml logs -f valhalla
+
+pnpm db:upgrade                                          # migrations
+uv run --directory apps/api python -m contour_api.seeds.sources
+
+pnpm api                                                 # http://127.0.0.1:8000
+pnpm dev                                                 # http://127.0.0.1:3000
 ```
+
+Set these in `.env` for the Docker path:
+
+```
+CONTOUR_VALHALLA_TILE_DIR=./data/valhalla
+CONTOUR_ELEVATION_PROVIDER=valhalla
+CONTOUR_ELEVATION_DATASET_ID=<the DEM the container actually downloaded>
+```
+
+Check what is actually available before planning a route:
+
+```bash
+curl -s localhost:8000/health/components | jq
+```
+
+`routing` reads `degraded` until tiles exist, and the response distinguishes a
+capability that is *switched off* from one that is *broken*.
+
+Then load the road attributes — routing works without this, but every surface and
+access field comes back unknown until it runs:
+
+```bash
+uv run --directory apps/api python -m contour_api.ingestion \
+    data/valhalla/<the .osm.pbf the container downloaded> -v
+```
+
+### Without Docker
+
+`./infra/scripts/dev-up.sh` starts the same three services natively, but it uses
+`pg_ctlcluster` and a system Redis, so it needs a Debian or Ubuntu host with root.
+It also expects Valhalla to be installed already — `sudo ./infra/valhalla/build.sh`
+compiles it from source, which takes 20-45 minutes. The Docker path exists to
+avoid exactly that.
 
 `dev-up.sh` reports what is actually available, including saying plainly when no
 routing tiles exist. `GET /health/components` returns the same information as

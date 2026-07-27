@@ -83,7 +83,18 @@ class TestHealth:
 
         if routing["status"] == "disabled":
             pytest.skip("no Valhalla endpoint configured")
-        if routing.get("tile_count", 0) == 0:
+        if routing["status"] == "unavailable":
+            # Configured but not answering. That is a different state from
+            # "answering with no tiles", and reporting it as degraded would be
+            # the understatement this test exists to prevent in the other
+            # direction — the engine is not merely limited, it is absent.
+            pytest.skip("Valhalla is configured but not reachable")
+
+        # tile_count is only reported for a reachable engine, so its absence
+        # here would mean the payload changed shape rather than that tiles are
+        # missing. Assert it is present rather than defaulting it to zero.
+        assert "tile_count" in routing
+        if routing["tile_count"] == 0:
             assert routing["status"] == "degraded"
             assert "no routing tiles" in routing["detail"]
             assert "build-tiles" in routing["remedy"]

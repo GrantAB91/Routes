@@ -104,17 +104,25 @@ def _tile_count(tile_dir: str) -> int:
     if not path.is_dir():
         return 0
 
-    archive = path / "tiles.tar"
-    if archive.exists():
+    # The archive's name is not fixed. infra/valhalla/build-tiles.sh writes
+    # `tiles.tar`; the official valhalla-scripted image names it after its
+    # `tileset_name`, which defaults to `valhalla_tiles.tar`. Looking only for
+    # the first would report zero tiles for a perfectly working Docker setup,
+    # and Contour would declare routing degraded while happily routing.
+    packed = 0
+    for archive in sorted(path.glob("*.tar")):
         try:
             with tarfile.open(archive) as tar:
-                return sum(1 for name in tar.getnames() if name.endswith(".gph"))
+                packed += sum(1 for name in tar.getnames() if name.endswith(".gph"))
         except (tarfile.TarError, OSError):
-            # A tar that cannot be read is not evidence of tiles. Falling back
-            # to the loose count says what is genuinely on disk.
-            pass
+            # A tar that cannot be read is not evidence of tiles; the loose
+            # count below still says what is genuinely on disk.
+            continue
 
-    return sum(1 for _ in path.rglob("*.gph"))
+    # Loose tiles are counted too: a build that has not been packed yet is
+    # still a build, and during a rebuild both forms can be present.
+    loose = sum(1 for _ in path.rglob("*.gph"))
+    return max(packed, loose)
 
 
 def _elevation() -> dict[str, Any]:

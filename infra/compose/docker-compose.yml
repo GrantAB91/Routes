@@ -1,0 +1,88 @@
+# Contour's local dependencies: PostGIS, Redis and Valhalla.
+#
+# The application itself is deliberately not in here. Contour is developed with
+# the API and web app running on the host so that reload works and a debugger
+# can attach; what containers give you is the three dependencies that are
+# tedious to install natively — particularly Valhalla, which otherwise takes
+# 20-45 minutes to compile.
+#
+# Every image and environment variable below is quoted from upstream:
+# postgis/postgis and redis are the images this project's CI runs against, and
+# the Valhalla variables come from docker/README.md in the valhalla 3.8.3
+# checkout that infra/valhalla/build.sh clones.
+#
+#   docker compose -f infra/compose/docker-compose.yml up -d
+#
+# Valhalla builds its graph on first start and serves nothing until it finishes.
+# That is not a hang: watch it with
+#
+#   docker compose -f infra/compose/docker-compose.yml logs -f valhalla
+
+name: contour
+
+services:
+  postgres:
+    # PostGIS, not plain postgres. The schema uses geometry columns and GiST
+    # indexes, so a stock postgres image fails on the first migration.
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: contour
+      POSTGRES_PASSWORD: contour
+      POSTGRES_DB: contour
+    ports:
+      - "${CONTOUR_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contour -d contour"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    ports:
+      - "${CONTOUR_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  valhalla:
+    # The "scripted" image builds the routing graph from a .osm.pbf on first
+    # start, which is why local development does not need build.sh at all.
+    image: ghcr.io/valhalla/valhalla-scripted:latest
+    ports:
+      - "${CONTOUR_VALHALLA_PORT:-8002}:8002"
+    environment:
+      # Which region to build. Override in .env to route somewhere else; the
+      # container rebuilds when the file behind this URL changes.
+      tile_urls: "${CONTOUR_OSM_EXTRACT_URL:-https://download.geofabrik.de/europe/ireland-and-northern-ireland-latest.osm.pbf}"
+      # Elevation tiles covering the graph. With these, Contour can be run with
+      # CONTOUR_ELEVATION_PROVIDER=valhalla and needs no separate DEM download.
+      # Costs build time and disk; set to False if elevation is not wanted, and
+      # Contour will report elevation as unavailable rather than guess at it.
+      build_elevation: "${CONTOUR_BUILD_ELEVATION:-True}"
+      # Reuse an existing tileset instead of rebuilding on every start.
+      use_tiles_ignore_pbf: "True"
+      build_tar: "True"
+      server_threads: "${CONTOUR_VALHALLA_THREADS:-2}"
+    volumes:
+      # Bind-mounted rather than a named volume so the API's health check can
+      # count the tiles on disk, and so a graph build survives `compose down -v`.
+      - "${CONTOUR_VALHALLA_DATA:-../../data/valhalla}:/custom_files"
+    healthcheck:
+      # /status answers as soon as the service is up. It does *not* mean tiles
+      # are built — Contour's own /health/components makes that distinction.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8002/status || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

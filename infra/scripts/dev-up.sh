@@ -2,9 +2,16 @@
 #
 # Start Contour's local dependencies: PostGIS, Redis and Valhalla.
 #
-# These run as native services rather than containers. Docker Compose files in
-# infra/compose describe the same topology for environments that have a Docker
-# daemon; this script exists for those that do not.
+# These run as native services rather than containers, using Debian's
+# pg_ctlcluster and a system Redis. That makes this script specific to a
+# Debian/Ubuntu host with root — it is what the reference container uses.
+#
+# On any other machine, prefer the containers:
+#
+#   docker compose -f infra/compose/docker-compose.yml up -d
+#
+# which describes the same three services and additionally builds the routing
+# graph for you.
 #
 # Idempotent: already-running services are left alone.
 
